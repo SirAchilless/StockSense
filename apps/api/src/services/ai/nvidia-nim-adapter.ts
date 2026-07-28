@@ -1,6 +1,6 @@
 import axios from 'axios';
-import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse } from './types';
-import { ResearchResponseSchema, ChatResponseSchema, GlobalNoteResponseSchema, NewsSentimentBatchResponseSchema } from './types';
+import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse, PortfolioAnalysisResponse } from './types';
+import { ResearchResponseSchema, ChatResponseSchema, GlobalNoteResponseSchema, NewsSentimentBatchResponseSchema, PortfolioAnalysisResponseSchema } from './types';
 
 const SYSTEM_PROMPT_RESEARCH = `You are a financial research assistant for Indian equity markets.
 
@@ -203,6 +203,42 @@ ${NEWS_SENTIMENT_SCHEMA}
       const parsed = NewsSentimentBatchResponseSchema.safeParse(JSON.parse(raw));
       if (parsed.success) return parsed.data;
       if (attempt === 1) throw new Error(`News sentiment failed schema validation after 2 attempts`);
+    }
+    throw new Error('unreachable');
+  }
+
+  async generatePortfolioAnalysis(req: GroundedPromptRequest): Promise<PortfolioAnalysisResponse> {
+    const SYSTEM_PROMPT_PORTFOLIO = `You are a portfolio analyst for Indian equity investors.
+
+CRITICAL RULES:
+1. Only use the pre-computed metrics in the <portfolio_metrics> block. The risk score, diversification score, weights, and per-holding flags are ALREADY CALCULATED — never recompute, override, or invent numeric values. Reference them as given.
+2. Frame ALL commentary as scenarios ("if X, then Y may follow"), never as directives. Do NOT tell the user to buy, sell, add, trim, exit, or set targets/stoplosses. Describe conditions and their possible effects only.
+3. Provide one scenario-framed note per holding in holdingNotes, using the same symbol strings provided.
+4. Return ONLY valid JSON matching the exact schema. No preamble, no markdown.
+5. If metrics are empty/insufficient, set dataAvailable to false and say so.`;
+
+    const PORTFOLIO_SCHEMA = `{
+  "overallAssessment": "string — 2-3 sentences summarising composition using the provided scores",
+  "riskCommentary": "string — scenario-framed risk observations grounded in concentration/sector metrics",
+  "diversificationCommentary": "string — scenario-framed diversification observations",
+  "holdingNotes": [ { "symbol": "string (as provided)", "note": "string — scenario-framed, non-directive" } ],
+  "confidence": "number 0.0–1.0 based on metric completeness",
+  "dataAvailable": "boolean"
+}`;
+
+    const userMessage = `
+<portfolio_metrics>
+${JSON.stringify(req.marketData ?? {}, null, 2)}
+</portfolio_metrics>
+
+Write the portfolio analysis. Return JSON matching exactly:
+${PORTFOLIO_SCHEMA}
+`;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const raw = await this.callChatCompletion(this.researchModel, SYSTEM_PROMPT_PORTFOLIO, userMessage);
+      const parsed = PortfolioAnalysisResponseSchema.safeParse(JSON.parse(raw));
+      if (parsed.success) return parsed.data;
+      if (attempt === 1) throw new Error(`Portfolio analysis failed schema validation after 2 attempts`);
     }
     throw new Error('unreachable');
   }

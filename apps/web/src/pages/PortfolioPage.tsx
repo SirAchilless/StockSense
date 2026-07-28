@@ -4,11 +4,15 @@ import { PortfolioSummary } from '../components/portfolio/PortfolioSummary';
 import { HoldingsTable } from '../components/portfolio/HoldingsTable';
 import { AddHoldingForm } from '../components/portfolio/AddHoldingForm';
 import { ImportHoldingsForm } from '../components/portfolio/ImportHoldingsForm';
+import { PortfolioAIPanel } from '../components/portfolio/PortfolioAIPanel';
 
 export default function PortfolioPage() {
   const { data, isLoading, isError, error } = usePortfolio();
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showAI, setShowAI] = useState(false);
+
+  const hasHoldings = !!data && data.holdings.length > 0;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-6 py-8">
@@ -70,6 +74,24 @@ export default function PortfolioPage() {
             <h2 className="mb-3 text-sm font-medium text-muted-foreground">Holdings</h2>
             <HoldingsTable holdings={data.holdings} />
           </div>
+
+          {/* AI Analysis (Phase 2.5) */}
+          {hasHoldings && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium text-muted-foreground">AI Analysis</h2>
+                {!showAI && (
+                  <button
+                    onClick={() => setShowAI(true)}
+                    className="flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+                  >
+                    ✨ Analyze portfolio
+                  </button>
+                )}
+              </div>
+              <PortfolioAIPanel enabled={showAI} />
+            </div>
+          )}
         </>
       )}
     </div>

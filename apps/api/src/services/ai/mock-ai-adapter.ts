@@ -1,4 +1,4 @@
-import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse } from './types';
+import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse, PortfolioAnalysisResponse } from './types';
 
 export class MockAIAdapter implements AIProvider {
   async generateResearch(req: GroundedPromptRequest): Promise<ResearchResponse> {
@@ -114,5 +114,79 @@ export class MockAIAdapter implements AIProvider {
     });
 
     return { items, confidence: 0.65, dataAvailable: true };
+  }
+
+  async generatePortfolioAnalysis(req: GroundedPromptRequest): Promise<PortfolioAnalysisResponse> {
+    const metrics = (req.marketData?.metrics ?? {}) as {
+      riskScore?: number;
+      riskLevel?: string;
+      diversificationScore?: number;
+      largestPositionPct?: number;
+      holdingCount?: number;
+      sectorCount?: number;
+      effectiveHoldings?: number;
+      holdings?: Array<{ symbol: string; weightPct: number; unrealizedPnLPct: number; flag: string; sector: string }>;
+      sectorAllocation?: Array<{ sector: string; weightPct: number }>;
+    };
+    const holdings = metrics.holdings ?? [];
+
+    if (!holdings.length) {
+      return {
+        overallAssessment: 'No holdings are available to analyse. Add holdings or import a portfolio to receive an assessment.',
+        riskCommentary: 'Insufficient data to assess portfolio risk.',
+        diversificationCommentary: 'Insufficient data to assess diversification.',
+        holdingNotes: [],
+        confidence: 0.1,
+        dataAvailable: false,
+      };
+    }
+
+    const riskLevel = metrics.riskLevel ?? 'moderate';
+    const riskScore = metrics.riskScore ?? 0;
+    const divScore = metrics.diversificationScore ?? 0;
+    const topSector = metrics.sectorAllocation?.[0];
+    const largest = holdings[0];
+
+    // Scenario-framed language only — no directive buy/sell/target/stoploss instructions.
+    const overallAssessment =
+      `This portfolio holds ${metrics.holdingCount ?? holdings.length} position(s) across ` +
+      `${metrics.sectorCount ?? 1} sector(s), with an effective breadth of roughly ` +
+      `${(metrics.effectiveHoldings ?? 0).toFixed(1)} equally-weighted names. Based only on current ` +
+      `composition, its computed risk score is ${riskScore}/100 (${riskLevel}) and its diversification ` +
+      `score is ${divScore}/100.`;
+
+    const riskCommentary =
+      topSector
+        ? `The largest single position, ${largest.symbol}, represents about ${largest.weightPct.toFixed(1)}% of value, ` +
+          `and ${topSector.sector} accounts for roughly ${topSector.weightPct.toFixed(1)}% of the book. ` +
+          `If ${topSector.sector} were to face a broad drawdown, the portfolio may see an outsized impact given this concentration; ` +
+          `were exposure spread across more names or sectors, that scenario would likely have a smaller effect.`
+        : `If the portfolio's largest positions were to decline together, the impact may be amplified by their combined weight.`;
+
+    const diversificationCommentary =
+      divScore >= 67
+        ? 'Holdings are relatively well spread; a shock to any single name or sector would likely have a contained effect on the whole.'
+        : divScore >= 34
+          ? 'Diversification is moderate. If additional uncorrelated names or sectors were added, concentration-driven swings may soften.'
+          : 'Concentration is high. If the dominant position or sector moved sharply, the portfolio would likely move with it; broadening exposure may reduce that sensitivity.';
+
+    const holdingNotes = holdings.map((h) => {
+      const scenario =
+        h.flag === 'strong'
+          ? `is currently up ${h.unrealizedPnLPct.toFixed(1)}%. If the move that drove this reverses, the unrealised gain may compress — its ${h.weightPct.toFixed(1)}% weight sizes that scenario.`
+          : h.flag === 'weak'
+            ? `is currently down ${Math.abs(h.unrealizedPnLPct).toFixed(1)}%. If weakness persists, it may continue to drag on returns; if the thesis recovers, the ${h.weightPct.toFixed(1)}% weight sets the potential rebound contribution.`
+            : `is roughly flat (${h.unrealizedPnLPct.toFixed(1)}%). Its ${h.weightPct.toFixed(1)}% weight determines how much any future move would move the overall portfolio.`;
+      return { symbol: h.symbol, note: `${h.symbol} (${h.sector}) ${scenario}` };
+    });
+
+    return {
+      overallAssessment,
+      riskCommentary,
+      diversificationCommentary,
+      holdingNotes,
+      confidence: 0.7,
+      dataAvailable: true,
+    };
   }
 }

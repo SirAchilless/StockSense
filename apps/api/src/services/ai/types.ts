@@ -59,11 +59,31 @@ export const NewsSentimentBatchResponseSchema = z.object({
 export type NewsItemSentiment = z.infer<typeof NewsItemSentimentSchema>;
 export type NewsSentimentBatchResponse = z.infer<typeof NewsSentimentBatchResponseSchema>;
 
+// ── Portfolio Analysis (Phase 2.5) ────────────────────────────────────────────
+// The AI narrates over deterministically-computed metrics (lib/portfolio-risk.ts).
+// It does NOT emit the numeric scores — those are grounded and attached server-side.
+// All language must be scenario-framed ("if X, then Y may follow"), never directive.
+export const PortfolioAnalysisResponseSchema = z.object({
+  overallAssessment: z.string().min(1),
+  riskCommentary: z.string().min(1),
+  diversificationCommentary: z.string().min(1),
+  holdingNotes: z.array(
+    z.object({
+      symbol: z.string(),
+      note: z.string().min(1),
+    }),
+  ),
+  confidence: z.number().min(0).max(1),
+  dataAvailable: z.boolean(),
+});
+
+export type PortfolioAnalysisResponse = z.infer<typeof PortfolioAnalysisResponseSchema>;
+
 // ──────────────────────────────
 // Grounded prompt request
 // ──────────────────────────────
 export interface GroundedPromptRequest {
-  useCase: 'research' | 'chat' | 'global_note' | 'news_sentiment';
+  useCase: 'research' | 'chat' | 'global_note' | 'news_sentiment' | 'portfolio_analysis';
   symbol?: string;
   marketData?: Record<string, unknown>;  // pre-fetched, injected verbatim
   userMessage?: string;                  // for chat use case
@@ -77,4 +97,5 @@ export interface AIProvider {
   generateChatReply(req: GroundedPromptRequest): Promise<ChatResponse>;
   generateGlobalNote(req: GroundedPromptRequest): Promise<GlobalNoteResponse>;
   generateNewsSentiment(req: GroundedPromptRequest): Promise<NewsSentimentBatchResponse>;
+  generatePortfolioAnalysis(req: GroundedPromptRequest): Promise<PortfolioAnalysisResponse>;
 }

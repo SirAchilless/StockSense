@@ -193,3 +193,61 @@ export async function runNewsSentimentPipeline(
 
   return results;
 }
+
+// ── Portfolio Analysis Pipeline (Phase 2.5) ───────────────────────────────────
+// Grounding: risk/diversification scores and per-holding flags are computed
+// deterministically (lib/portfolio-risk.ts) from the user's own holdings + P&L.
+// The AI only narrates over those grounded numbers — it never emits them.
+import type { HoldingPnL } from '../../lib/pnl';
+import { calculatePortfolioRisk } from '../../lib/portfolio-risk';
+import type { PortfolioRiskMetrics, RiskHoldingInput } from '../../lib/portfolio-risk';
+import type { PortfolioAnalysisResponse } from './types';
+
+export interface PortfolioAnalysisPipelineInput {
+  holdings: HoldingPnL[];
+  marketDataProvider: MarketDataProvider;
+  aiProvider: AIProvider;
+}
+
+export interface PortfolioAnalysisPipelineResult {
+  metrics: PortfolioRiskMetrics;
+  analysis: PortfolioAnalysisResponse;
+  disclaimer: string;
+  dataAsOf: string;
+}
+
+export async function runPortfolioAnalysisPipeline(
+  input: PortfolioAnalysisPipelineInput,
+): Promise<PortfolioAnalysisPipelineResult> {
+  const { holdings, marketDataProvider, aiProvider } = input;
+  const dataAsOf = new Date().toISOString();
+
+  // Step 1-2: fetch the sector for each unique symbol (grounding input for concentration).
+  // Missing sectors degrade gracefully to 'Unknown' rather than being guessed.
+  const uniqueSymbols = [...new Set(holdings.map((h) => h.symbol))];
+  const sectorResults = await Promise.allSettled(
+    uniqueSymbols.map((sym) => marketDataProvider.getStockFundamentals(sym)),
+  );
+  const sectorMap = new Map<string, string | null>();
+  sectorResults.forEach((r, i) => {
+    if (r.status === 'fulfilled') sectorMap.set(uniqueSymbols[i], r.value.sector);
+  });
+
+  // Step 3: build grounded inputs and compute metrics deterministically.
+  const riskInputs: RiskHoldingInput[] = holdings.map((h) => ({
+    symbol: h.symbol,
+    currentValue: h.currentValue,
+    unrealizedPnLPct: h.unrealizedPnLPct,
+    sector: sectorMap.get(h.symbol) ?? null,
+  }));
+  const metrics = calculatePortfolioRisk(riskInputs);
+
+  // Step 4-6: inject only the computed metrics into the AI prompt, generate narrative.
+  const analysis = await aiProvider.generatePortfolioAnalysis({
+    useCase: 'portfolio_analysis',
+    marketData: { metrics, fetchedAt: dataAsOf },
+  });
+
+  // Step 7: attach disclaimer (recommendation-shaped output).
+  return { metrics, analysis, disclaimer: DISCLAIMER, dataAsOf };
+}

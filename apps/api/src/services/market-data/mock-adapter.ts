@@ -79,6 +79,35 @@ const GLOBAL_FIXTURES: Record<GlobalSymbol, GlobalFixture> = {
   ETH_USD:  { symbol: 'ETH_USD',  name: 'Ethereum',                     category: 'crypto',    price:  3087.50, change:  -42.30,  changePercent: -1.35,  currency: 'USD' },
 };
 
+// Real sector mapping for common NSE symbols — keeps mock portfolio analytics
+// (sector allocation, diversification) meaningful rather than single-sector.
+const MOCK_SECTORS: Record<string, string> = {
+  TCS: 'Information Technology', INFY: 'Information Technology', WIPRO: 'Information Technology', HCLTECH: 'Information Technology', TECHM: 'Information Technology',
+  HDFCBANK: 'Banking', ICICIBANK: 'Banking', SBIN: 'Banking', KOTAKBANK: 'Banking', AXISBANK: 'Banking',
+  RELIANCE: 'Energy', ONGC: 'Energy', NTPC: 'Energy', POWERGRID: 'Energy', COALINDIA: 'Energy',
+  SUNPHARMA: 'Pharmaceuticals', DRREDDY: 'Pharmaceuticals', CIPLA: 'Pharmaceuticals', DIVISLAB: 'Pharmaceuticals',
+  HINDUNILVR: 'FMCG', ITC: 'FMCG', NESTLEIND: 'FMCG', BRITANNIA: 'FMCG', DABUR: 'FMCG',
+  MARUTI: 'Automobile', TATAMOTORS: 'Automobile', M_M: 'Automobile', BAJAJ_AUTO: 'Automobile', EICHERMOT: 'Automobile',
+  TATASTEEL: 'Metals', JSWSTEEL: 'Metals', HINDALCO: 'Metals', VEDL: 'Metals',
+  LT: 'Infrastructure', ULTRACEMCO: 'Cement', GRASIM: 'Cement', SHREECEM: 'Cement',
+  BHARTIARTL: 'Telecom', ZOMATO: 'Consumer Services', DMART: 'Retail',
+};
+
+const MOCK_INDUSTRIES: Record<string, string> = {
+  'Information Technology': 'IT Services',
+  Banking: 'Private/Public Sector Banks',
+  Energy: 'Oil, Gas & Power',
+  Pharmaceuticals: 'Drugs & Pharma',
+  FMCG: 'Consumer Staples',
+  Automobile: 'Auto & Ancillaries',
+  Metals: 'Metals & Mining',
+  Infrastructure: 'Engineering & Construction',
+  Cement: 'Cement & Products',
+  Telecom: 'Telecom Services',
+  'Consumer Services': 'Online Services',
+  Retail: 'Retailing',
+};
+
 export class MockMarketDataAdapter implements MarketDataProvider {
   async getIndexQuotes(symbols: IndexSymbol[]): Promise<IndexQuote[]> {
     return symbols.map((s) => ({
@@ -107,11 +136,15 @@ export class MockMarketDataAdapter implements MarketDataProvider {
   }
 
   async getStockFundamentals(symbol: string): Promise<StockFundamentals> {
+    // Map common NSE symbols to their real sectors so portfolio-level features
+    // (sector allocation, diversification scoring) are demonstrable on mock data.
+    const sector = MOCK_SECTORS[symbol.toUpperCase()] ?? 'Information Technology';
+    const industry = MOCK_INDUSTRIES[sector] ?? 'Diversified';
     return {
       symbol,
       name: `${symbol} Ltd`,
-      sector: 'Information Technology',
-      industry: 'IT Services',
+      sector,
+      industry,
       marketCap: 1234567890000,
       pe: 28.4,
       pb: 9.2,

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { runResearchPipeline, DISCLAIMER } from '../grounding-pipeline';
+import { runResearchPipeline, runPortfolioAnalysisPipeline, DISCLAIMER } from '../grounding-pipeline';
 import { MockAIAdapter } from '../mock-ai-adapter';
 import { MockMarketDataAdapter } from '../../market-data/mock-adapter';
+import { calculateHoldingPnL } from '../../../lib/pnl';
 
 const marketDataProvider = new MockMarketDataAdapter();
 const aiProvider = new MockAIAdapter();
@@ -71,5 +72,64 @@ describe('runResearchPipeline', () => {
     const result = await runResearchPipeline({ symbol: 'TCS', marketDataProvider, aiProvider });
     expect(result.disclaimer).toContain('not investment advice');
     expect(result.disclaimer).toContain('SEBI');
+  });
+});
+
+describe('runPortfolioAnalysisPipeline', () => {
+  const makeHolding = (symbol: string, quantity: number, buyPrice: number, currentPrice: number) => ({
+    id: symbol,
+    ...calculateHoldingPnL({ symbol, quantity, buyPrice, currentPrice }),
+  });
+
+  it('computes grounded metrics and attaches the disclaimer', async () => {
+    const holdings = [
+      makeHolding('TCS', 10, 3000, 3600),      // +20% → strong
+      makeHolding('HDFCBANK', 20, 1500, 1350), // -10% → weak
+      makeHolding('RELIANCE', 5, 2400, 2400),  // flat → neutral
+    ];
+    const result = await runPortfolioAnalysisPipeline({ holdings, marketDataProvider, aiProvider });
+
+    expect(result.disclaimer).toBe(DISCLAIMER);
+    expect(result.metrics.holdingCount).toBe(3);
+    expect(result.metrics.sectorCount).toBeGreaterThanOrEqual(2); // mock maps distinct sectors
+    expect(result.metrics.riskScore).toBeGreaterThanOrEqual(0);
+    expect(result.metrics.riskScore).toBeLessThanOrEqual(100);
+    expect(result.metrics.diversificationScore).toBeGreaterThanOrEqual(0);
+    expect(result.metrics.diversificationScore).toBeLessThanOrEqual(100);
+    // Per-holding flags reflect deterministic P&L, not AI output
+    const bySymbol = Object.fromEntries(result.metrics.holdings.map((h) => [h.symbol, h.flag]));
+    expect(bySymbol.TCS).toBe('strong');
+    expect(bySymbol.HDFCBANK).toBe('weak');
+    expect(bySymbol.RELIANCE).toBe('neutral');
+    // One narrative note per holding
+    expect(result.analysis.holdingNotes).toHaveLength(3);
+    expect(result.analysis.dataAvailable).toBe(true);
+  });
+
+  it('keeps commentary scenario-framed, not directive (acceptance 2.5)', async () => {
+    const holdings = [makeHolding('TCS', 10, 3000, 3600)];
+    const result = await runPortfolioAnalysisPipeline({ holdings, marketDataProvider, aiProvider });
+
+    const allText = [
+      result.analysis.overallAssessment,
+      result.analysis.riskCommentary,
+      result.analysis.diversificationCommentary,
+      ...result.analysis.holdingNotes.map((n) => n.note),
+    ].join(' ').toLowerCase();
+
+    // Must not issue directive trade commands
+    for (const directive of ['you should buy', 'you should sell', 'sell now', 'buy now', 'exit now', 'set a stoploss', 'set a target']) {
+      expect(allText).not.toContain(directive);
+    }
+    // Must use scenario framing
+    expect(allText).toContain('if');
+  });
+
+  it('reports dataAvailable=false for an empty portfolio', async () => {
+    const result = await runPortfolioAnalysisPipeline({ holdings: [], marketDataProvider, aiProvider });
+    expect(result.metrics.holdingCount).toBe(0);
+    expect(result.metrics.riskScore).toBe(0);
+    expect(result.analysis.dataAvailable).toBe(false);
+    expect(result.disclaimer).toBe(DISCLAIMER);
   });
 });

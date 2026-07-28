@@ -1,14 +1,57 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import multer from 'multer';
 import { prisma } from '../lib/prisma';
 import { authenticate } from '../middleware/authenticate';
 import { getMarketDataProvider } from '../services/market-data';
-import { calculateHoldingPnL, calculatePortfolioSummary } from '../lib/pnl';
+import { getAIProvider } from '../services/ai';
+import { runPortfolioAnalysisPipeline } from '../services/ai/grounding-pipeline';
+import { calculateHoldingPnL, calculatePortfolioSummary, type PortfolioSummary } from '../lib/pnl';
 import { parseImportBuffer } from '../lib/import-parser';
 
 export const portfolioRouter = Router();
 portfolioRouter.use(authenticate); // all portfolio routes require auth
+
+// AI-backed portfolio analysis hits the AI provider — rate-limit aggressively.
+const analysisLimiter = rateLimit({ windowMs: 60_000, max: 5 });
+
+// Shared: load a user's portfolio and compute live P&L. Returns null when empty.
+async function buildPortfolioSummary(userId: string): Promise<PortfolioSummary | null> {
+  const portfolio = await prisma.portfolio.findUnique({
+    where: { userId },
+    include: { holdings: true },
+  });
+  if (!portfolio || portfolio.holdings.length === 0) return null;
+
+  const provider = getMarketDataProvider();
+  const quotes = await Promise.allSettled(
+    [...new Set(portfolio.holdings.map((h) => h.symbol))].map((sym) => provider.getStockQuote(sym)),
+  );
+
+  const priceMap = new Map<string, { price: number; previousClose: number }>();
+  quotes.forEach((r) => {
+    if (r.status === 'fulfilled') {
+      priceMap.set(r.value.symbol, { price: r.value.price, previousClose: r.value.previousClose });
+    }
+  });
+
+  const holdingsPnL = portfolio.holdings.map((h) => {
+    const quote = priceMap.get(h.symbol);
+    return {
+      id: h.id,
+      ...calculateHoldingPnL({
+        symbol: h.symbol,
+        quantity: h.quantity,
+        buyPrice: h.buyPrice,
+        currentPrice: quote?.price ?? h.buyPrice,
+        previousClose: quote?.previousClose,
+      }),
+    };
+  });
+
+  return calculatePortfolioSummary(holdingsPnL);
+}
 
 // Multer config — memory storage, 5MB limit, CSV/XLSX only
 const upload = multer({
@@ -29,48 +72,52 @@ const upload = multer({
 // GET /portfolio — full portfolio with live P&L
 portfolioRouter.get('/', async (req, res) => {
   try {
-    const portfolio = await prisma.portfolio.findUnique({
-      where: { userId: req.user!.id },
-      include: { holdings: true },
-    });
-
-    if (!portfolio || portfolio.holdings.length === 0) {
+    const summary = await buildPortfolioSummary(req.user!.id);
+    if (!summary) {
       res.json({ data: { holdings: [], totalInvested: 0, currentValue: 0, totalPnL: 0, totalPnLPct: 0, dailyChange: 0, dailyChangePct: 0 } });
       return;
     }
-
-    const provider = getMarketDataProvider();
-    const quotes = await Promise.allSettled(
-      [...new Set(portfolio.holdings.map((h) => h.symbol))].map((sym) =>
-        provider.getStockQuote(sym)
-      )
-    );
-
-    const priceMap = new Map<string, { price: number; previousClose: number }>();
-    quotes.forEach((r) => {
-      if (r.status === 'fulfilled') {
-        priceMap.set(r.value.symbol, { price: r.value.price, previousClose: r.value.previousClose });
-      }
-    });
-
-    const holdingsPnL = portfolio.holdings.map((h) => {
-      const quote = priceMap.get(h.symbol);
-      return {
-        id: h.id,
-        ...calculateHoldingPnL({
-          symbol: h.symbol,
-          quantity: h.quantity,
-          buyPrice: h.buyPrice,
-          currentPrice: quote?.price ?? h.buyPrice,
-          previousClose: quote?.previousClose,
-        }),
-      };
-    });
-
-    res.json({ data: calculatePortfolioSummary(holdingsPnL) });
+    res.json({ data: summary });
   } catch (err) {
     console.error('[portfolio GET]', err);
     res.status(500).json({ error: 'Failed to load portfolio' });
+  }
+});
+
+// GET /portfolio/analysis — AI portfolio intelligence (Phase 2.5)
+// Risk score, diversification score, and per-holding flags are computed
+// deterministically; the AI layer only narrates over them (scenario-framed).
+portfolioRouter.get('/analysis', analysisLimiter, async (req, res) => {
+  try {
+    const summary = await buildPortfolioSummary(req.user!.id);
+    if (!summary) {
+      res.status(422).json({ error: 'No holdings to analyse. Add holdings or import a portfolio first.' });
+      return;
+    }
+
+    const result = await runPortfolioAnalysisPipeline({
+      holdings: summary.holdings,
+      marketDataProvider: getMarketDataProvider(),
+      aiProvider: getAIProvider(),
+    });
+
+    res.json({
+      data: {
+        summary: {
+          totalInvested: summary.totalInvested,
+          currentValue: summary.currentValue,
+          totalPnL: summary.totalPnL,
+          totalPnLPct: summary.totalPnLPct,
+        },
+        metrics: result.metrics,
+        analysis: result.analysis,
+        disclaimer: result.disclaimer,
+        dataAsOf: result.dataAsOf,
+      },
+    });
+  } catch (err) {
+    console.error('[portfolio/analysis]', err);
+    res.status(502).json({ error: 'Failed to generate portfolio analysis. Please try again.' });
   }
 });
 

@@ -51,6 +51,34 @@ Multipart file upload (CSV/XLSX) → `200` `{ imported: number, skipped: number,
 ### `DELETE /portfolio/holdings/:id`
 → `204`
 
+### `GET /portfolio/analysis`
+AI portfolio intelligence (Phase 2.5). Scores are computed deterministically from
+holdings + live P&L; the AI only narrates over them (scenario-framed, non-directive).
+Rate-limited 5/min/user. Returns `422` when the portfolio is empty.
+→ `200`
+```json
+{
+  "summary": { "totalInvested": 250000, "currentValue": 268400, "totalPnL": 18400, "totalPnLPct": 7.36 },
+  "metrics": {
+    "riskScore": 42, "riskLevel": "moderate", "diversificationScore": 68,
+    "concentrationHHI": 0.28, "sectorHHI": 0.31, "largestPositionPct": 34.2,
+    "effectiveHoldings": 3.6, "holdingCount": 6, "sectorCount": 4,
+    "holdings": [ { "symbol": "TCS", "sector": "Information Technology", "weightPct": 34.2, "unrealizedPnLPct": 15.1, "flag": "strong" } ],
+    "sectorAllocation": [ { "sector": "Information Technology", "weightPct": 46.0 } ]
+  },
+  "analysis": {
+    "overallAssessment": "...",
+    "riskCommentary": "If Information Technology faces a broad drawdown, the portfolio may see an outsized impact...",
+    "diversificationCommentary": "...",
+    "holdingNotes": [ { "symbol": "TCS", "note": "..." } ],
+    "confidence": 0.7,
+    "dataAvailable": true
+  },
+  "disclaimer": "AI-generated research for informational purposes only...",
+  "dataAsOf": "2026-07-28T13:10:00+05:30"
+}
+```
+
 ## Research
 
 ### `GET /research/:symbol`

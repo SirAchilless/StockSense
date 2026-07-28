@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import type { PortfolioSummary, Holding } from '../types/portfolio';
+import type { PortfolioSummary, Holding, PortfolioAnalysis } from '../types/portfolio';
 
 export function usePortfolio() {
   return useQuery<PortfolioSummary>({
@@ -31,5 +31,20 @@ export function useDeleteHolding() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['portfolio'] });
     },
+  });
+}
+
+// Phase 2.5 — AI portfolio analysis. Fetched on demand (enabled) since it
+// hits the AI provider and is rate-limited server-side.
+export function usePortfolioAnalysis(enabled: boolean) {
+  return useQuery<PortfolioAnalysis>({
+    queryKey: ['portfolio', 'analysis'],
+    queryFn: async () => {
+      const res = await api.get<{ data: PortfolioAnalysis }>('/portfolio/analysis');
+      return res.data.data;
+    },
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 }

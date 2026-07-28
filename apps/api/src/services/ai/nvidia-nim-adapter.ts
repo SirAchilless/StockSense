@@ -1,6 +1,6 @@
 import axios from 'axios';
-import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse, PortfolioAnalysisResponse, OptionChainInterpretationResponse } from './types';
-import { ResearchResponseSchema, ChatResponseSchema, GlobalNoteResponseSchema, NewsSentimentBatchResponseSchema, PortfolioAnalysisResponseSchema, OptionChainInterpretationResponseSchema } from './types';
+import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse, PortfolioAnalysisResponse, OptionChainInterpretationResponse, FnoInterpretationResponse } from './types';
+import { ResearchResponseSchema, ChatResponseSchema, GlobalNoteResponseSchema, NewsSentimentBatchResponseSchema, PortfolioAnalysisResponseSchema, OptionChainInterpretationResponseSchema, FnoInterpretationResponseSchema } from './types';
 
 const SYSTEM_PROMPT_RESEARCH = `You are a financial research assistant for Indian equity markets.
 
@@ -244,6 +244,43 @@ ${OPTION_CHAIN_SCHEMA}
       const parsed = OptionChainInterpretationResponseSchema.safeParse(JSON.parse(raw));
       if (parsed.success) return parsed.data;
       if (attempt === 1) throw new Error('Option chain interpretation failed schema validation after 2 attempts');
+    }
+    throw new Error('unreachable');
+  }
+
+  async generateFnoInterpretation(req: GroundedPromptRequest): Promise<FnoInterpretationResponse> {
+    const SYSTEM_PROMPT_FNO = `You are an F&O market analyst for Indian equity derivatives (NSE).
+
+CRITICAL RULES:
+1. Only reference metrics provided in the <fno_metrics> block. Rollover %, cost of carry, FII/DII net OI, and participant positioning are PRE-COMPUTED — never recompute, invent, or override them.
+2. Frame ALL commentary as scenarios ("if X, then Y may follow"). Do NOT tell the user to buy, sell, take positions, or set targets. Describe conditions and their possible implications only.
+3. Each note (rollover, FII positioning, DII positioning, cost of carry) must be grounded in the provided metrics.
+4. Return ONLY valid JSON. No preamble, no markdown.
+5. If data is insufficient, set dataAvailable to false.`;
+
+    const FNO_SCHEMA = `{
+  "rolloverNote": "string — scenario-framed observation on rollover vs average",
+  "fiiPositioningNote": "string — FII futures and options positioning scenario",
+  "diiPositioningNote": "string — DII positioning scenario",
+  "costOfCarryNote": "string — contango/backwardation scenario",
+  "overallNote": "string — integrated 2-3 sentence scenario across all dimensions",
+  "confidence": "number 0.0–1.0",
+  "dataAvailable": "boolean"
+}`;
+
+    const userMessage = `
+<fno_metrics>
+${JSON.stringify(req.marketData ?? {}, null, 2)}
+</fno_metrics>
+
+Write the F&O intelligence interpretation. Return JSON matching exactly:
+${FNO_SCHEMA}
+`;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const raw = await this.callChatCompletion(this.researchModel, SYSTEM_PROMPT_FNO, userMessage);
+      const parsed = FnoInterpretationResponseSchema.safeParse(JSON.parse(raw));
+      if (parsed.success) return parsed.data;
+      if (attempt === 1) throw new Error('F&O interpretation failed schema validation after 2 attempts');
     }
     throw new Error('unreachable');
   }

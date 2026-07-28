@@ -40,6 +40,7 @@ export function AppLayout() {
               { to: '/breadth', label: 'Breadth' },
               { to: '/news', label: 'News' },
               { to: '/options', label: 'Options' },
+              { to: '/fno', label: 'F&O' },
               { to: '/chat', label: 'AI Chat' },
             ].map(({ to, label }) => (
               <NavLink

@@ -14,6 +14,7 @@ import { technicalRouter } from './routes/technical';
 import { chatRouter } from './routes/chat';
 import { newsRouter } from './routes/news';
 import { optionsRouter } from './routes/options';
+import { fnoRouter } from './routes/fno';
 import passport from './lib/passport';
 
 const app = express();
@@ -39,6 +40,7 @@ app.use('/technical', technicalRouter);
 app.use('/chat', chatRouter);
 app.use('/news', newsRouter);
 app.use('/options', optionsRouter);
+app.use('/fno', fnoRouter);
 
 // 404 handler
 app.use((_req, res) => {

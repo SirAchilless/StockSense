@@ -99,11 +99,26 @@ export const OptionChainInterpretationResponseSchema = z.object({
 
 export type OptionChainInterpretationResponse = z.infer<typeof OptionChainInterpretationResponseSchema>;
 
+// ── F&O Intelligence Interpretation (Phase 3.2) ───────────────────────────────
+// AI narrates over deterministically-computed rollover %, CoC, FII/DII net OI,
+// participant positioning. Never emits or overrides the numeric values.
+export const FnoInterpretationResponseSchema = z.object({
+  rolloverNote: z.string().min(1),
+  fiiPositioningNote: z.string().min(1),
+  diiPositioningNote: z.string().min(1),
+  costOfCarryNote: z.string().min(1),
+  overallNote: z.string().min(1),
+  confidence: z.number().min(0).max(1),
+  dataAvailable: z.boolean(),
+});
+
+export type FnoInterpretationResponse = z.infer<typeof FnoInterpretationResponseSchema>;
+
 // ──────────────────────────────
 // Grounded prompt request
 // ──────────────────────────────
 export interface GroundedPromptRequest {
-  useCase: 'research' | 'chat' | 'global_note' | 'news_sentiment' | 'portfolio_analysis' | 'option_chain';
+  useCase: 'research' | 'chat' | 'global_note' | 'news_sentiment' | 'portfolio_analysis' | 'option_chain' | 'fno_intelligence';
   symbol?: string;
   marketData?: Record<string, unknown>;  // pre-fetched, injected verbatim
   userMessage?: string;                  // for chat use case
@@ -119,4 +134,5 @@ export interface AIProvider {
   generateNewsSentiment(req: GroundedPromptRequest): Promise<NewsSentimentBatchResponse>;
   generatePortfolioAnalysis(req: GroundedPromptRequest): Promise<PortfolioAnalysisResponse>;
   generateOptionChainInterpretation(req: GroundedPromptRequest): Promise<OptionChainInterpretationResponse>;
+  generateFnoInterpretation(req: GroundedPromptRequest): Promise<FnoInterpretationResponse>;
 }

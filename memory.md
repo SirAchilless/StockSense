@@ -3,7 +3,7 @@
 > Analytical snapshot of the whole repository: what the project is, how it is
 > structured, what is actually built (vs. documented), and the notable gaps
 > between the documentation set and the code.
-> First generated 2026-07-28; last updated 2026-07-28 after Phase 3.1 (Option Chain Intelligence).
+> First generated 2026-07-28; last updated 2026-07-28 after Phase 3.2 (F&O Intelligence).
 
 ---
 
@@ -36,6 +36,7 @@ recommendation-shaped output ("not a SEBI-registered investment adviser").
 | AI | NVIDIA NIM (OpenAI-compatible), provider-agnostic `AIProvider` interface; Mock adapter default |
 | Market data | Pluggable `MarketDataProvider`; Alpha Vantage adapter + Mock default |
 | Options data | Pluggable `OptionChainProvider`; NSE adapter + Mock default (Phase 3.1) |
+| F&O data | Pluggable `FnoDataProvider`; NSE adapter + Mock default (Phase 3.2) |
 | News | Pluggable `NewsProvider`; RSS adapter + Mock default |
 | Tooling | pnpm 9 workspaces, ESLint, Prettier, Vitest |
 | Infra (documented) | Docker, NGINX, GitHub Actions, Vercel (web), AWS ECS/RDS (api) |
@@ -64,50 +65,48 @@ Root scripts (`package.json`): `dev` (concurrently runs api + web), `build`,
 ## 4. Backend (`apps/api`)
 
 Entry `src/index.ts` mounts routers: `/health`, `/auth`, `/market`,
-`/portfolio`, `/research`, `/technical`, `/chat`, `/news`, `/options`.
+`/portfolio`, `/research`, `/technical`, `/chat`, `/news`, `/options`, `/fno`.
 Middleware: helmet, cors (credentials), compression, morgan, json/urlencoded,
 cookie-parser, passport.
 
 **Layered structure:** `routes → lib/services → prisma`.
 
 ### Services (the only layers allowed to touch external providers)
-- **`services/market-data/`** — `MarketDataProvider` interface with
-  `MockMarketDataAdapter` (default) and `AlphaVantageAdapter`. Selected via
-  `MARKET_DATA_PROVIDER` (`mock` | `alpha_vantage`). Covers index quotes, stock
-  quotes, fundamentals, OHLC, market status, global symbols, and market breadth.
-- **`services/ai/`** — `AIProvider` interface with `MockAIAdapter` (default) and
-  `NvidiaNimAdapter` (`NIM_MODE` = `cloud` | `local`; else mock). The **grounding
-  pipeline** exposes `runResearchPipeline`, `runChatPipeline`,
-  `runGlobalNotePipeline`, `runNewsSentimentPipeline`,
-  `runPortfolioAnalysisPipeline` (Phase 2.5), and **`runOptionChainPipeline`**
-  (Phase 3.1), plus a shared `DISCLAIMER`.
+- **`services/market-data/`** — `MarketDataProvider` with `MockMarketDataAdapter`
+  (default) and `AlphaVantageAdapter`. Env: `MARKET_DATA_PROVIDER`.
+- **`services/ai/`** — `AIProvider` with `MockAIAdapter` (default) and
+  `NvidiaNimAdapter`. The **grounding pipeline** exposes:
+  `runResearchPipeline`, `runChatPipeline`, `runGlobalNotePipeline`,
+  `runNewsSentimentPipeline`, `runPortfolioAnalysisPipeline` (2.5),
+  `runOptionChainPipeline` (3.1), **`runFnoPipeline`** (3.2).
+  Plus shared `DISCLAIMER`.
 - **`services/news/`** — `NewsProvider` with `MockNewsAdapter` (default) and
-  `RssNewsAdapter` (`NEWS_PROVIDER` = `mock` | `rss`).
-- **`services/options/`** *(Phase 3.1)* — `OptionChainProvider` with
-  `MockOptionChainAdapter` (default, full Black-Scholes + Greeks + OI fixtures)
-  and `NseOptionsAdapter` (live NSE API, cookie-based session).
-  Selected via `OPTIONS_PROVIDER` (`mock` | `nse`; default `mock`).
+  `RssNewsAdapter`. Env: `NEWS_PROVIDER`.
+- **`services/options/`** *(3.1)* — `OptionChainProvider` with
+  `MockOptionChainAdapter` (default) and `NseOptionsAdapter`. Env: `OPTIONS_PROVIDER`.
+- **`services/fno/`** *(3.2)* — `FnoDataProvider` with `MockFnoAdapter` (default)
+  and `NseFnoAdapter`. Env: `FNO_PROVIDER`.
 
-All services use a lazy singleton factory and default to the **Mock adapter**, so
-the app runs end-to-end with **zero API keys**.
+All services use lazy singleton factory; all default to Mock → **zero API keys needed**.
 
 ### `lib/` utilities
 `jwt.ts`, `passport.ts`, `prisma.ts`, `import-parser.ts` (CSV/XLSX),
 `indicators.ts` (SMA/EMA/RSI/MACD), `pnl.ts` (realized/unrealized P&L),
-`portfolio-risk.ts` (Phase 2.5 — deterministic risk/diversification scoring),
-and **`options-greeks.ts`** (Phase 3.1 — Black-Scholes price+Greeks, Newton-Raphson
-IV solver, max-pain algorithm, PCR, IV percentile, ATM-strike helpers).
+`portfolio-risk.ts` (2.5 — deterministic risk/diversification),
+`options-greeks.ts` (3.1 — Black-Scholes, IV solver, max pain, PCR),
+**`fno-analytics.ts`** (3.2 — rollover %, cost of carry, FII/DII 5d sums,
+participant L/S ratio, contra signal).
 `middleware/authenticate.ts` guards protected routes.
 
 ### Persistence (Prisma)
 Models: `User`, `RefreshToken`, `Portfolio` (1:1 with user), `Holding`. Postgres
 16 via `DATABASE_URL`. `docker-compose.yml` provisions only local Postgres.
 
-### Tests (Vitest — 132 tests across 9 files)
-`import-parser` (dep missing in sandbox — pre-existing), `indicators`, `pnl`,
-`portfolio-risk`, `grounding-pipeline`, mock-adapter tests for market-data / ai /
-news, and **(Phase 3.1)** `options-greeks` (25 tests, Black-Scholes correctness
-incl. put-call parity) and `mock-options-adapter` (18 tests).
+### Tests (Vitest — 176 tests across 11 files)
+Pre-existing: `import-parser` (dep missing in sandbox), `indicators`, `pnl`,
+`portfolio-risk`, `grounding-pipeline`, market-data / ai / news mock adapters.
+Phase 3.1: `options-greeks` (25), `mock-options-adapter` (18).
+**Phase 3.2: `fno-analytics` (23), `mock-fno-adapter` (21).**
 
 ---
 
@@ -116,16 +115,13 @@ incl. put-call parity) and `mock-options-adapter` (18 tests).
 `App.tsx` — lazy-loaded, code-split routes behind `ProtectedRoute` + `AppLayout`.
 Public: `/login`, `/register`. Protected: `/dashboard`, `/portfolio`,
 `/research`, `/technical`, `/chat`, `/global`, `/breadth`, `/news`,
-**`/options`** (Phase 3.1).
+`/options` (3.1), **`/fno`** (3.2).
 
 - **Component groups:** `breadth/`, `chat/`, `global/`, `market/`, `news/`,
-  `portfolio/` (Add/Import/Holdings/Summary + PortfolioAIPanel),
-  `research/` (ConfidenceBar, DisclaimerBanner, RatioGrid), `technical/`, `layout/`,
-  **`options/`** (OptionChainTable, GreeksPanel, OIChart, MaxPainChart, OptionAIPanel).
-- **Hooks:** `useBreadth`, `useChat`, `useGlobalMarkets`, `useMarketData`,
-  `useNews`, `useOAuthCallback`, `usePortfolio` (+ `usePortfolioAnalysis`),
-  `useResearch`, `useTechnical`, **`useOptions`** (`useOptionChain`,
-  `useOptionAnalysis`, `useOptionExpiries`).
+  `portfolio/`, `research/`, `technical/`, `layout/`, `options/` (3.1),
+  **`fno/`** (RolloverPanel, FiiDiiDerPanel, ParticipantOITable, FnoAIPanel).
+- **Hooks:** all prior hooks + `useOptions` (3.1) + **`useFno`** (3.2 —
+  `useRollover`, `useFiiDerPositions`, `useParticipantOI`, `useFnoAnalysis`).
 - **State rule:** server data in TanStack Query; Redux only for client-only state.
 
 ---
@@ -137,7 +133,7 @@ Public: `/login`, `/register`. Protected: `/dashboard`, `/portfolio`,
 - Every API boundary validated with zod. Uploads MIME/size/row-validated.
 - Provider keys backend-scoped, never in the client bundle. AI-backed endpoints
   (`/research`, `/chat`, `/news` sentiment, `/portfolio/analysis`,
-  **`/options/analysis`**) rate-limited.
+  `/options/analysis`, **`/fno/analysis`**) rate-limited.
 - Prompt-injection defense: user text treated as data; AI output schema-validated.
 
 ---
@@ -147,63 +143,53 @@ Public: `/login`, `/register`. Protected: `/dashboard`, `/portfolio`,
 `README`, `ARCHITECTURE`, `SYSTEM_DESIGN`, `FEATURES`, `ROADMAP`,
 `API_DOCUMENTATION`, `DATABASE_SCHEMA`, `AI_ENGINE`, `AUTHENTICATION`,
 `ENVIRONMENT_SETUP`, `DEPLOYMENT`, `SECURITY`, `TESTING`, `CONTRIBUTING`,
-`PORTFOLIO_ANALYSIS` (Phase 2.5), **`OPTIONS_CHAIN`** (Phase 3.1),
+`PORTFOLIO_ANALYSIS` (2.5), `OPTIONS_CHAIN` (3.1), **`FNO_INTELLIGENCE`** (3.2),
 **`CHANGELOG`**, plus `ai-stock-intelligence-platform-prompt.md`.
-
-ROADMAP breaks work into small, independently buildable steps (Phase 1: 1.1–1.11;
-Phase 2: 2.1–2.5; Phase 3: 3.1–3.5, compliance-gated).
 
 ---
 
 ## 8. Build status by phase (verified 2026-07-28)
 
-- **Phase 1 (1.1–1.11):** built — scaffolding, auth, market-data adapter,
-  dashboard, portfolio (manual + CSV/Excel), grounding pipeline, AI research,
-  basic technical analysis, AI chat.
-- **Phase 2.1–2.4:** built — Global Markets + AI note, Market Breadth, technical
-  components (patterns/volume profile), News + AI sentiment.
-- **Phase 2.5 (Portfolio AI):** built — deterministic risk & diversification
-  scores + per-holding flags, `GET /portfolio/analysis`, AI scenario-framed
-  narrative, `PortfolioAIPanel` UI. All 88 unit tests passed at that point.
-- **Phase 3.1 (Option Chain Intelligence):** built this session — Black-Scholes
-  Greeks library (`lib/options-greeks.ts`), PCR + max-pain + IV percentile
-  computations, `OptionChainProvider` with Mock and NSE adapters, AI interpretation
-  pipeline (`runOptionChainPipeline`), `GET /options/chain/:symbol` (data only) and
-  `GET /options/analysis/:symbol` (data + AI, rate-limited), full frontend
-  (OptionChainTable, GreeksPanel, OIChart, MaxPainChart, OptionAIPanel), route
-  `/options`, nav link. **37 new tests; total 132 tests pass.**
-- **Phase 3.2–3.5:** not started (compliance-gated).
+- **Phase 1 (1.1–1.11):** built — scaffolding, auth, market-data, dashboard,
+  portfolio (manual + CSV/Excel), grounding pipeline, AI research, technical analysis, chat.
+- **Phase 2.1–2.4:** built — Global Markets, Market Breadth, Technical components, News+sentiment.
+- **Phase 2.5 (Portfolio AI):** built — deterministic risk/diversification scoring,
+  `GET /portfolio/analysis`, AI narrative, `PortfolioAIPanel`.
+- **Phase 3.1 (Option Chain Intelligence):** built — Black-Scholes Greeks library,
+  mock + NSE adapters, `GET /options/chain|analysis`, full frontend. 37 new tests.
+- **Phase 3.2 (F&O Intelligence):** built this session — rollover %, cost of carry,
+  FII/DII 10-day series with 5d rolling sums, participant-wise OI with contra signal,
+  `runFnoPipeline`, `GET /fno/rollover|fii-positions|participant-oi|analysis`,
+  full frontend (RolloverPanel, FiiDiiDerPanel, ParticipantOITable, FnoAIPanel).
+  **44 new tests; total 176 tests pass.**
+- **Phase 3.3–3.5:** not started (compliance-gated).
 
-### Phase 3.1 grounding design (important)
-All option Greeks (delta, gamma, theta, vega), PCR, max pain, and IV percentile
-are computed **deterministically** in `lib/options-greeks.ts` before any AI call.
-The AI only narrates — scenario-framed, never directive, never emitting or
-overriding the numeric values. This mirrors the anti-hallucination principle
-from Phase 1 research and Phase 2.5 Portfolio AI. See [OPTIONS_CHAIN.md](./OPTIONS_CHAIN.md).
+### Phase 3.2 grounding design (important)
+Rollover %, cost of carry, FII/DII 5-day sums, and participant L/S ratios are
+computed **deterministically** in `lib/fno-analytics.ts` before any AI call.
+The AI receives only those pre-computed aggregates — no raw series — and narrates
+scenario-framed commentary. It never emits or overrides the numeric values.
+See [FNO_INTELLIGENCE.md](./FNO_INTELLIGENCE.md).
 
 ---
 
 ## 9. Notable gaps: docs vs. actual code ⚠️
 
-1. **Market-data provider.** Docs describe `nse_delayed` / `paid_vendor`; the code
-   ships **Mock** (default) + **Alpha Vantage**.
-2. **Implementation ahead of the "Phase 1 MVP" framing.** Global Markets, Breadth,
-   News+Sentiment, Portfolio AI (Phase 2), and now Option Chain (Phase 3.1) are built.
-3. **Database schema mismatch.** `DATABASE_SCHEMA.md` documents tables that don't
-   exist in the actual `schema.prisma` — treat the code schema as authoritative.
-4. **Default runtime is fully mocked** (all providers) until env vars are set.
-5. **`API_DOCUMENTATION.md` and `FEATURES.md`** do not yet document the
-   `/options/*` endpoints — update needed in a docs pass.
+1. **Market-data provider.** Docs describe `nse_delayed` / `paid_vendor`; code ships Mock + AlphaVantage.
+2. **Implementation ahead of "Phase 1 MVP".** Phases 2.x, 3.1, and 3.2 are all built.
+3. **Database schema mismatch.** `DATABASE_SCHEMA.md` documents tables that don't exist in Prisma — treat code as authoritative.
+4. **Default runtime fully mocked** until env vars are set.
+5. **`API_DOCUMENTATION.md` and `FEATURES.md`** don't yet document `/options/*` or `/fno/*` — docs pass needed.
 
-## 10. Repo health — pre-existing issues (not from Phase 3.1) 🔧
+## 10. Repo health — pre-existing issues (not from Phase 3.2) 🔧
 
 - `Express.User` has no `id` augmentation → `req.user!.id` errors under `tsc`.
-- `chat.ts` / `runChatPipeline` `disclaimer` type conflict (`boolean` vs `string`).
+- `chat.ts` / `runChatPipeline` `disclaimer` type conflict.
 - Several `no-useless-escape` lint errors in route regexes.
 - Web app missing `vite/client` types → `import.meta.env` errors.
 - `import-parser.test.ts` requires `xlsx` not installed in dev sandbox.
 
-**Tests pass regardless** (`vitest` uses esbuild, not `tsc`).
+**176 tests pass** (Vitest uses esbuild, not `tsc`).
 
 ## 11. Quick-reference API surface
 
@@ -213,7 +199,9 @@ from Phase 1 research and Phase 2.5 Portfolio AI. See [OPTIONS_CHAIN.md](./OPTIO
 `DELETE /portfolio/holdings/:id`, `GET /portfolio/analysis` ·
 `GET /research/:symbol` · `GET /technical/:symbol?timeframe=` ·
 `POST /chat/message` · `GET /news`, `/news/:symbol` · global-markets & breadth ·
-**`GET /options/symbols`, `/options/expiries/:symbol`,
-`/options/chain/:symbol?expiry=`, `/options/analysis/:symbol?expiry=`** (Phase 3.1)
+`GET /options/symbols`, `/options/expiries/:symbol`,
+`/options/chain/:symbol`, `/options/analysis/:symbol` ·
+**`GET /fno/symbols`, `/fno/rollover/:symbol`, `/fno/fii-positions`,
+`/fno/participant-oi`, `/fno/analysis/:symbol`** (Phase 3.2)
 
 Error shape: `{ error: { code, message, details } }`. Rate limits per group.

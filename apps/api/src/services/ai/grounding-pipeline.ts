@@ -315,3 +315,80 @@ export async function runPortfolioAnalysisPipeline(
   // Step 7: attach disclaimer (recommendation-shaped output).
   return { metrics, analysis, disclaimer: DISCLAIMER, dataAsOf };
 }
+
+// ── F&O Intelligence Pipeline (Phase 3.2) ─────────────────────────────────────
+// Grounding: rollover %, cost of carry, FII/DII net OI, participant metrics are
+// all computed deterministically (lib/fno-analytics.ts) before the AI call.
+// The AI only narrates — scenario-framed, never directive, never re-emitting numbers.
+import type { FnoDataProvider, RolloverData, FiiDerPositionSummary, ParticipantOIData } from '../fno/types';
+import type { FnoInterpretationResponse } from './types';
+import { computeParticipantMetrics } from '../../lib/fno-analytics';
+
+export interface FnoPipelineInput {
+  symbol: string;
+  fnoProvider: FnoDataProvider;
+  aiProvider: AIProvider;
+}
+
+export interface FnoPipelineResult {
+  rollover: RolloverData;
+  fiiPositions: FiiDerPositionSummary;
+  participantOI: ParticipantOIData;
+  interpretation: FnoInterpretationResponse;
+  disclaimer: string;
+  dataAsOf: string;
+}
+
+export async function runFnoPipeline(input: FnoPipelineInput): Promise<FnoPipelineResult> {
+  const { symbol, fnoProvider, aiProvider } = input;
+  const dataAsOf = new Date().toISOString();
+
+  // Step 1: fetch all three data sources concurrently
+  const [rollover, fiiPositions, participantOI] = await Promise.all([
+    fnoProvider.getRolloverData(symbol),
+    fnoProvider.getFiiDerPositions(),
+    fnoProvider.getParticipantOI(),
+  ]);
+
+  // Step 2: derive participant metrics deterministically
+  const participantMetrics = computeParticipantMetrics(participantOI.rows);
+
+  // Step 3: build grounded prompt payload — only computed numbers, never raw series
+  const marketData = {
+    symbol: rollover.symbol,
+    // Rollover
+    rolloverPercent: rollover.rolloverPercent,
+    threeMonthAvgRollover: rollover.threeMonthAvgRollover,
+    rolloverVsAvgDiff: rollover.rolloverVsAvgDiff,
+    currentExpiry: rollover.currentExpiry,
+    nextExpiry: rollover.nextExpiry,
+    daysToCurrentExpiry: rollover.daysToCurrentExpiry,
+    currentMonthOI: rollover.currentMonthOI,
+    nextMonthOI: rollover.nextMonthOI,
+    // Cost of carry
+    costOfCarryCurrent: rollover.costOfCarryCurrent,
+    costOfCarryNext: rollover.costOfCarryNext,
+    // FII/DII summary (aggregated, no per-day series)
+    fiiIndexFutNetOI: fiiPositions.latestFiiIndexFutNetOI,
+    fiiStockFutNetOI: fiiPositions.latestFiiStockFutNetOI,
+    fiiNetFuturesBuy5d: fiiPositions.fiiNetFuturesBuy5d,
+    fiiNetOptionsBuy5d: fiiPositions.fiiNetOptionsBuy5d,
+    fiiIndexPCR: fiiPositions.latestFiiIndexPCR,
+    diiNetFuturesBuy5d: fiiPositions.diiNetFuturesBuy5d,
+    // Participant positioning
+    fiiLongShortRatio: participantMetrics.fiiLongShortRatio,
+    fiiNetLongPct: participantMetrics.fiiNetLongPct,
+    clientVsFiiContra: participantMetrics.clientVsFiiContra,
+    proNetLong: participantMetrics.proNetLong,
+    fetchedAt: dataAsOf,
+  };
+
+  // Step 4: AI narrates over grounded numbers only
+  const interpretation = await aiProvider.generateFnoInterpretation({
+    useCase: 'fno_intelligence',
+    symbol,
+    marketData,
+  });
+
+  return { rollover, fiiPositions, participantOI, interpretation, disclaimer: DISCLAIMER, dataAsOf };
+}

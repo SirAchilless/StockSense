@@ -1,4 +1,4 @@
-import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse, PortfolioAnalysisResponse, OptionChainInterpretationResponse } from './types';
+import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse, PortfolioAnalysisResponse, OptionChainInterpretationResponse, FnoInterpretationResponse } from './types';
 
 export class MockAIAdapter implements AIProvider {
   async generateResearch(req: GroundedPromptRequest): Promise<ResearchResponse> {
@@ -262,6 +262,101 @@ export class MockAIAdapter implements AIProvider {
       ivNote,
       keyLevelNotes,
       confidence: 0.72,
+      dataAvailable: true,
+    };
+  }
+
+  async generateFnoInterpretation(req: GroundedPromptRequest): Promise<FnoInterpretationResponse> {
+    const data = (req.marketData ?? {}) as {
+      symbol?: string;
+      rolloverPercent?: number;
+      threeMonthAvgRollover?: number;
+      rolloverVsAvgDiff?: number;
+      costOfCarryCurrent?: number;
+      costOfCarryNext?: number;
+      daysToCurrentExpiry?: number;
+      fiiIndexFutNetOI?: number;
+      fiiStockFutNetOI?: number;
+      fiiNetFuturesBuy5d?: number;
+      fiiNetOptionsBuy5d?: number;
+      fiiIndexPCR?: number;
+      diiNetFuturesBuy5d?: number;
+      fiiLongShortRatio?: number;
+      fiiNetLongPct?: number;
+      clientVsFiiContra?: boolean;
+    };
+
+    if (!data.rolloverPercent && data.rolloverPercent !== 0) {
+      return {
+        rolloverNote: 'Insufficient rollover data to generate an observation.',
+        fiiPositioningNote: 'FII derivatives data unavailable.',
+        diiPositioningNote: 'DII data unavailable.',
+        costOfCarryNote: 'Cost of carry data unavailable.',
+        overallNote: 'F&O intelligence data could not be loaded.',
+        confidence: 0.1,
+        dataAvailable: false,
+      };
+    }
+
+    const { symbol = 'index', rolloverPercent = 0, threeMonthAvgRollover = 70,
+            rolloverVsAvgDiff = 0, costOfCarryCurrent = 0, costOfCarryNext = 0,
+            daysToCurrentExpiry = 7, fiiIndexFutNetOI = 0, fiiNetFuturesBuy5d = 0,
+            fiiNetOptionsBuy5d = 0, fiiIndexPCR = 1, diiNetFuturesBuy5d = 0,
+            fiiLongShortRatio = 1, clientVsFiiContra = false } = data;
+
+    // Rollover note
+    const rolloverLabel = rolloverVsAvgDiff > 3 ? 'above' : rolloverVsAvgDiff < -3 ? 'below' : 'in line with';
+    const rolloverNote =
+      `${symbol} futures rollover stands at ${rolloverPercent.toFixed(1)}%, ${rolloverLabel} its 3-month average of ` +
+      `${threeMonthAvgRollover.toFixed(1)}% (diff: ${rolloverVsAvgDiff > 0 ? '+' : ''}${rolloverVsAvgDiff.toFixed(1)}pp). ` +
+      (Math.abs(rolloverVsAvgDiff) > 3
+        ? `A rollover ${rolloverLabel} average can indicate ${rolloverVsAvgDiff > 0 ? 'higher conviction carry-forward of positions — if accompanied by increasing OI, it may reflect fresh long/short momentum' : 'early profit-booking or hesitation to carry positions — if overall OI is declining, it may suggest position unwinding'} ahead of expiry.`
+        : `Rollover in line with average suggests normal position management ahead of expiry; no unusual carry-over signal.`);
+
+    // FII positioning note
+    const fiiDir = fiiIndexFutNetOI > 0 ? 'net long' : 'net short';
+    const fiiBuyDir = fiiNetFuturesBuy5d > 0 ? 'net buyers' : 'net sellers';
+    const fiiNote =
+      `FII index futures positioning is ${fiiDir} (net OI: ${Math.abs(fiiIndexFutNetOI).toLocaleString('en-IN')} contracts). ` +
+      `Over the last 5 sessions, FIIs were ${fiiBuyDir} in futures (₹${Math.abs(fiiNetFuturesBuy5d).toLocaleString('en-IN')} cr ${fiiNetFuturesBuy5d > 0 ? 'bought' : 'sold'}). ` +
+      `FII long/short ratio in index futures stands at ${fiiLongShortRatio.toFixed(2)}.` +
+      (clientVsFiiContra ? ' Notably, CLIENT-category OI is positioned opposite to FII — a contra-indicator that has historically been observed near short-term turning points.' : '');
+
+    // DII note
+    const diiDir = diiNetFuturesBuy5d > 0 ? 'net buyers' : 'net sellers';
+    const diiNote =
+      `DIIs (predominantly mutual funds and insurance) were ${diiDir} in index futures over the last 5 sessions ` +
+      `(₹${Math.abs(diiNetFuturesBuy5d).toLocaleString('en-IN')} cr). ` +
+      `DII flows in derivatives tend to be counter-cyclical; if equity markets weaken, DII futures buying may provide a cushion, ` +
+      `while continued selling may confirm broader institutional caution.`;
+
+    // CoC note
+    const cocLabel = costOfCarryCurrent > 0 ? 'positive (contango)' : 'negative (backwardation)';
+    const cocNote =
+      `Current-month futures cost of carry is ${costOfCarryCurrent.toFixed(2)}% annualised (${cocLabel}). ` +
+      `Next-month CoC is ${costOfCarryNext.toFixed(2)}%. ` +
+      (costOfCarryCurrent > 0
+        ? `Positive carry suggests the market expects spot to remain at or above current levels through expiry; ` +
+          `if the basis erodes rapidly, short sellers may be covering positions.`
+        : `Negative carry (backwardation) can indicate elevated hedging demand or a weak spot market; ` +
+          `if carry turns positive, it may signal demand revival for leveraged long positions.`) +
+      ` With ${daysToCurrentExpiry} day(s) to expiry, basis convergence toward zero is expected as settlement approaches.`;
+
+    // Overall
+    const overallNote =
+      `Taken together: rollover is ${rolloverLabel} average with FIIs ${fiiDir} in index futures and ` +
+      `${fiiNetOptionsBuy5d > 0 ? 'net buyers' : 'net sellers'} in options. ` +
+      `If FII net long positioning in futures sustains, the derivatives data suggests the market may lean toward ` +
+      `${fiiIndexFutNetOI > 0 ? 'upside continuation' : 'continued caution'} through the expiry cycle, ` +
+      `though any sharp global risk-off event could force rapid position unwinds.`;
+
+    return {
+      rolloverNote,
+      fiiPositioningNote: fiiNote,
+      diiPositioningNote: diiNote,
+      costOfCarryNote: cocNote,
+      overallNote,
+      confidence: 0.71,
       dataAvailable: true,
     };
   }

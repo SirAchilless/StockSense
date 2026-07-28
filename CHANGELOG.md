@@ -4,6 +4,30 @@ All notable changes to StockSense, tracked by ROADMAP step. Dates are IST.
 
 ## [Unreleased]
 
+### Added — Phase 3.2: F&O Intelligence (2026-07-28)
+- **Data layer** (`services/fno/`): `FnoDataProvider` interface, `MockFnoAdapter` (10-day FII/DII
+  series, realistic rollover %, CoC, 4-participant OI snapshot), `NseFnoAdapter` (live NSE API —
+  `/api/quote-derivative`, `/api/fiiDiiData`, `/api/participant-oi`), lazy singleton factory
+  via `FNO_PROVIDER` env var (`mock` | `nse`; default `mock`).
+- **Deterministic computation** (`lib/fno-analytics.ts`): `computeRolloverMetrics` (rollover %,
+  total OI, vs-average diff), `computeCostOfCarry` (annualised contango/backwardation),
+  `computeFiiDerSummary` (5-day rolling sums, latest OI, FII index PCR),
+  `computeParticipantMetrics` (FII L/S ratio, net long %, CLIENT-vs-FII contra signal).
+- **AI interpretation layer** (`runFnoPipeline`): concurrently fetches rollover, FII/DII, and
+  participant OI; derives participant metrics; injects compact grounded payload; AI produces
+  5-section scenario-framed commentary (rollover, FII, DII, CoC, overall).
+  `generateFnoInterpretation` added to both `MockAIAdapter` and `NvidiaNimAdapter`.
+- **API routes** (`routes/fno.ts`): `GET /fno/symbols`, `GET /fno/rollover/:symbol`,
+  `GET /fno/fii-positions`, `GET /fno/participant-oi`, `GET /fno/analysis/:symbol`
+  (rate-limited 10/min). All routes behind `authenticate`.
+- **Frontend**: `FnoPage` with symbol selector, 3-tab view — **RolloverPanel** (summary tiles,
+  OI-by-expiry bar chart, CoC bar chart, expiry table), **FiiDiiDerPanel** (net buy tiles +
+  7-session daily chart), **ParticipantOITable** (index futures/stock futures/options tables
+  with per-participant PCR), **FnoAIPanel** (5-section AI interpretation + disclaimer).
+  `/fno` route added; "F&O" nav link added to `AppLayout`.
+- **Tests**: 44 new (fno-analytics.test.ts + mock-fno-adapter.test.ts). Total **176 tests pass**.
+- **Docs**: `FNO_INTELLIGENCE.md`, `CHANGELOG.md`, `memory.md` updated.
+
 ### Added — Phase 3.1: Option Chain Intelligence (2026-07-28)
 - **Data layer** (`services/options/`): `OptionChainProvider` interface, `MockOptionChainAdapter`
   (full Black-Scholes, IV skew, deterministic OI distribution, all Greeks), and

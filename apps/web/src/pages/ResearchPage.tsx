@@ -59,6 +59,20 @@ export default function ResearchPage() {
           </div>
 
           <ConfidenceBar confidence={data.response.confidence} />
+
+          {!data.response.dataAvailable && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-xs text-destructive">
+              ⚠ Partial data — some information for this symbol is unavailable. Analysis may be limited.
+            </div>
+          )}
+
+          {data.response.missingFields.length > 0 && (
+            <div className="rounded-lg border border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+              Unavailable fields:{' '}
+              <span className="font-mono">{data.response.missingFields.join(', ')}</span>
+            </div>
+          )}
+
           <DisclaimerBanner text={data.disclaimer} />
 
           {/* Business Summary */}

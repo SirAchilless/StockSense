@@ -26,10 +26,19 @@ export async function runResearchPipeline(input: ResearchPipelineInput): Promise
     marketDataProvider.getStockFundamentals(symbol),
   ]);
 
-  // Step 3: Validate — log missing fields but continue (AI will mark them null)
-  const missingCheck: string[] = [];
-  if (!quote.price) missingCheck.push('currentPrice');
-  if (!fundamentals.sector) missingCheck.push('sector');
+  // Step 3: Validate — note missing fields so downstream AI can report them honestly
+  const missingFields: string[] = [];
+  if (!quote.price) missingFields.push('currentPrice');
+  if (!fundamentals.sector) missingFields.push('sector');
+  if (!fundamentals.pe) missingFields.push('pe');
+  if (!fundamentals.pb) missingFields.push('pb');
+  if (!fundamentals.roe) missingFields.push('roe');
+  if (!fundamentals.roce) missingFields.push('roce');
+  if (!fundamentals.eps) missingFields.push('eps');
+  if (fundamentals.debtToEquity === null) missingFields.push('debtToEquity');
+  if (missingFields.length > 0) {
+    console.info(`[research/${symbol}] missing fields: ${missingFields.join(', ')}`);
+  }
 
   // Step 4: Inject — build structured prompt context
   const marketData = {

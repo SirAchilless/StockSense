@@ -1,4 +1,4 @@
-import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse, PortfolioAnalysisResponse } from './types';
+import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse, PortfolioAnalysisResponse, OptionChainInterpretationResponse } from './types';
 
 export class MockAIAdapter implements AIProvider {
   async generateResearch(req: GroundedPromptRequest): Promise<ResearchResponse> {
@@ -186,6 +186,82 @@ export class MockAIAdapter implements AIProvider {
       diversificationCommentary,
       holdingNotes,
       confidence: 0.7,
+      dataAvailable: true,
+    };
+  }
+
+  async generateOptionChainInterpretation(req: GroundedPromptRequest): Promise<OptionChainInterpretationResponse> {
+    const data = (req.marketData ?? {}) as {
+      symbol?: string;
+      pcrOI?: number;
+      pcrVolume?: number;
+      maxPainStrike?: number;
+      underlyingPrice?: number;
+      atmStrike?: number;
+      daysToExpiry?: number;
+      ivPercentile?: number;
+      totalCallOI?: number;
+      totalPutOI?: number;
+      topCallStrikes?: Array<{ strikePrice: number; oi: number }>;
+      topPutStrikes?: Array<{ strikePrice: number; oi: number }>;
+    };
+
+    const { symbol = 'underlying', pcrOI = 1, maxPainStrike = 0, underlyingPrice = 0,
+            daysToExpiry = 7, ivPercentile = 50, topCallStrikes = [], topPutStrikes = [] } = data;
+
+    if (!underlyingPrice) {
+      return {
+        marketBiasNote: 'Insufficient option chain data to determine market bias.',
+        maxPainNote: 'Max pain data unavailable.',
+        ivNote: 'IV data unavailable.',
+        keyLevelNotes: [],
+        confidence: 0.1,
+        dataAvailable: false,
+      };
+    }
+
+    // PCR interpretation: >1.2 = moderately bearish OI bias, <0.8 = moderately bullish
+    const pcrLabel = pcrOI > 1.3 ? 'elevated (bearish bias)' : pcrOI < 0.8 ? 'low (bullish bias)' : 'near neutral';
+    const marketBiasNote =
+      `The PCR OI for ${symbol} stands at ${pcrOI.toFixed(2)}, which is ${pcrLabel}. ` +
+      `If this ratio persists into expiry, it may suggest that put sellers are positioned for support, ` +
+      `though a rapid move below key put OI strikes could trigger dealer delta-hedging and amplify downside.`;
+
+    const mpDiff = maxPainStrike > 0 ? +(maxPainStrike - underlyingPrice).toFixed(0) : 0;
+    const mpDir = mpDiff > 0 ? 'above' : mpDiff < 0 ? 'below' : 'at';
+    const maxPainNote =
+      `Max pain is computed at ${maxPainStrike.toLocaleString('en-IN')}, which is ${Math.abs(mpDiff)} points ${mpDir} the current spot. ` +
+      `With ${daysToExpiry} day(s) remaining, if spot gravitates toward max pain as time value decays, ` +
+      `it may imply limited directional move from here; a sharp break away from this level would benefit ` +
+      `option buyers significantly.`;
+
+    const ivLabel = ivPercentile >= 75 ? 'high relative to recent history' : ivPercentile <= 25 ? 'low (compressed)' : 'moderate';
+    const ivNote =
+      `IV percentile is at ${ivPercentile}, indicating that options are currently priced ${ivLabel}. ` +
+      (ivPercentile >= 75
+        ? 'If implied volatility reverts toward its mean, option buyers would see time value erode faster than usual; sellers tend to benefit in high-IV environments if the move fails to materialise.'
+        : ivPercentile <= 25
+          ? 'Low IV typically makes buying options cheaper in premium terms; if a catalyst emerges and realised volatility picks up, option buyers could see significant gains in extrinsic value.'
+          : 'Moderate IV suggests option pricing is broadly in line with recent norms; no strong directional premium signal from volatility alone.');
+
+    // Key level notes from top OI concentrations
+    const keyLevelNotes = [
+      ...topCallStrikes.slice(0, 2).map((s) => ({
+        strikePrice: s.strikePrice,
+        note: `${s.strikePrice.toLocaleString('en-IN')} CE has the highest call OI (${s.oi.toLocaleString('en-IN')} contracts), acting as a potential resistance zone. If spot approaches this level and OI does not unwind, sellers may defend it; a breakout with volume could accelerate the move.`,
+      })),
+      ...topPutStrikes.slice(0, 2).map((s) => ({
+        strikePrice: s.strikePrice,
+        note: `${s.strikePrice.toLocaleString('en-IN')} PE has the highest put OI (${s.oi.toLocaleString('en-IN')} contracts), acting as a potential support zone. Unwinding of this OI may signal weakening support; addition of OI on a down-move could indicate increased hedging by large players.`,
+      })),
+    ];
+
+    return {
+      marketBiasNote,
+      maxPainNote,
+      ivNote,
+      keyLevelNotes,
+      confidence: 0.72,
       dataAvailable: true,
     };
   }

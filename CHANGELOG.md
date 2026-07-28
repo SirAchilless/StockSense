@@ -4,6 +4,31 @@ All notable changes to StockSense, tracked by ROADMAP step. Dates are IST.
 
 ## [Unreleased]
 
+### Added — Phase 3.1: Option Chain Intelligence (2026-07-28)
+- **Data layer** (`services/options/`): `OptionChainProvider` interface, `MockOptionChainAdapter`
+  (full Black-Scholes, IV skew, deterministic OI distribution, all Greeks), and
+  `NseOptionsAdapter` (live NSE public API with session-cookie management).
+  Factory in `index.ts` selects adapter via `OPTIONS_PROVIDER` env var (`mock` | `nse`; default `mock`).
+- **Deterministic computation** (`lib/options-greeks.ts`): Black-Scholes price + delta/gamma/theta/vega
+  (Abramowitz & Stegun CDF, put-call parity verified), Newton-Raphson IV solver, max-pain algorithm,
+  PCR calculation, IV percentile, ATM-strike finder, strike-interval registry.
+- **AI interpretation layer** (`runOptionChainPipeline`): Injects pre-computed PCR, max pain,
+  IV percentile, and top-OI strike concentrations into `generateOptionChainInterpretation`.
+  AI narrates only — scenario-framed, never directive, never emits or overrides numeric values.
+  Implemented on both MockAIAdapter and NvidiaNimAdapter; zod-validated with one retry.
+- **API routes** (`routes/options.ts`): `GET /options/symbols`, `GET /options/expiries/:symbol`,
+  `GET /options/chain/:symbol` (data only), `GET /options/analysis/:symbol` (data + AI, 10/min rate-limited).
+  All routes behind `authenticate` middleware.
+- **Frontend**: `OptionsPage` with symbol selector (4 indices + 15 stocks), expiry selector,
+  3-tab view (Option Chain table / OI Distribution bar chart / Max Pain curve),
+  `GreeksPanel` summary, and lazy-loaded `OptionAIPanel` with confidence badge and disclaimer.
+  `/options` route added; "Options" nav link added to `AppLayout`.
+- **Tests**: 37 new tests across 2 files — Black-Scholes correctness (put-call parity,
+  Greek sign constraints, edge cases, IV recovery), max pain, PCR, IV percentile, ATM strike;
+  mock adapter (expiry format, Thursday rule, chain structure, Delta bounds, lot sizes).
+- **Docs**: `OPTIONS_CHAIN.md` covering architecture, API reference, supported symbols,
+  component guide, and Phase 3 compliance limitations.
+
 ### Added — Phase 2.5: Portfolio AI (2026-07-28)
 - Deterministic portfolio risk & diversification scoring (`lib/portfolio-risk.ts`):
   risk score, diversification score, concentration/sector HHI, effective holdings,

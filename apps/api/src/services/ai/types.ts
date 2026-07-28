@@ -79,11 +79,31 @@ export const PortfolioAnalysisResponseSchema = z.object({
 
 export type PortfolioAnalysisResponse = z.infer<typeof PortfolioAnalysisResponseSchema>;
 
+// ── Option Chain Interpretation (Phase 3.1) ───────────────────────────────────
+// The AI narrates over deterministically-computed metrics (options-greeks.ts):
+// PCR, max pain, IV percentile, and OI concentrations.
+// It never emits or overrides these numeric values — only scenario-framed commentary.
+export const OptionChainInterpretationResponseSchema = z.object({
+  marketBiasNote: z.string().min(1),
+  maxPainNote: z.string().min(1),
+  ivNote: z.string().min(1),
+  keyLevelNotes: z.array(
+    z.object({
+      strikePrice: z.number(),
+      note: z.string().min(1),
+    }),
+  ),
+  confidence: z.number().min(0).max(1),
+  dataAvailable: z.boolean(),
+});
+
+export type OptionChainInterpretationResponse = z.infer<typeof OptionChainInterpretationResponseSchema>;
+
 // ──────────────────────────────
 // Grounded prompt request
 // ──────────────────────────────
 export interface GroundedPromptRequest {
-  useCase: 'research' | 'chat' | 'global_note' | 'news_sentiment' | 'portfolio_analysis';
+  useCase: 'research' | 'chat' | 'global_note' | 'news_sentiment' | 'portfolio_analysis' | 'option_chain';
   symbol?: string;
   marketData?: Record<string, unknown>;  // pre-fetched, injected verbatim
   userMessage?: string;                  // for chat use case
@@ -98,4 +118,5 @@ export interface AIProvider {
   generateGlobalNote(req: GroundedPromptRequest): Promise<GlobalNoteResponse>;
   generateNewsSentiment(req: GroundedPromptRequest): Promise<NewsSentimentBatchResponse>;
   generatePortfolioAnalysis(req: GroundedPromptRequest): Promise<PortfolioAnalysisResponse>;
+  generateOptionChainInterpretation(req: GroundedPromptRequest): Promise<OptionChainInterpretationResponse>;
 }

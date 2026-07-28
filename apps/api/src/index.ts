@@ -13,6 +13,7 @@ import { researchRouter } from './routes/research';
 import { technicalRouter } from './routes/technical';
 import { chatRouter } from './routes/chat';
 import { newsRouter } from './routes/news';
+import { optionsRouter } from './routes/options';
 import passport from './lib/passport';
 
 const app = express();
@@ -37,6 +38,7 @@ app.use('/research', researchRouter);
 app.use('/technical', technicalRouter);
 app.use('/chat', chatRouter);
 app.use('/news', newsRouter);
+app.use('/options', optionsRouter);
 
 // 404 handler
 app.use((_req, res) => {

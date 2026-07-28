@@ -1,6 +1,6 @@
 import axios from 'axios';
-import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse, PortfolioAnalysisResponse } from './types';
-import { ResearchResponseSchema, ChatResponseSchema, GlobalNoteResponseSchema, NewsSentimentBatchResponseSchema, PortfolioAnalysisResponseSchema } from './types';
+import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse, PortfolioAnalysisResponse, OptionChainInterpretationResponse } from './types';
+import { ResearchResponseSchema, ChatResponseSchema, GlobalNoteResponseSchema, NewsSentimentBatchResponseSchema, PortfolioAnalysisResponseSchema, OptionChainInterpretationResponseSchema } from './types';
 
 const SYSTEM_PROMPT_RESEARCH = `You are a financial research assistant for Indian equity markets.
 
@@ -203,6 +203,47 @@ ${NEWS_SENTIMENT_SCHEMA}
       const parsed = NewsSentimentBatchResponseSchema.safeParse(JSON.parse(raw));
       if (parsed.success) return parsed.data;
       if (attempt === 1) throw new Error(`News sentiment failed schema validation after 2 attempts`);
+    }
+    throw new Error('unreachable');
+  }
+
+  async generateOptionChainInterpretation(req: GroundedPromptRequest): Promise<OptionChainInterpretationResponse> {
+    const SYSTEM_PROMPT_OPTIONS = `You are an options market analyst for Indian equity markets (NSE).
+
+CRITICAL RULES:
+1. Only reference metrics provided in the <option_chain_metrics> block. Never invent OI values, PCR ratios, or price levels.
+2. Frame ALL observations as scenarios ("if X, then Y may follow"), never as directives. Do NOT tell the user to buy, sell, enter, or exit positions.
+3. PCR OI, max pain, and IV percentile are pre-computed — reference them as given, never recalculate.
+4. Provide notes for the top 2-3 key OI levels only (top call and put strikes by OI), not every strike.
+5. Return ONLY valid JSON matching the exact schema. No preamble, no markdown.`;
+
+    const OPTION_CHAIN_SCHEMA = `{
+  "marketBiasNote": "string — scenario-framed PCR and OI bias observation",
+  "maxPainNote": "string — max pain level and expiry mechanics scenario",
+  "ivNote": "string — IV percentile commentary and scenario implications",
+  "keyLevelNotes": [
+    {
+      "strikePrice": "number — the strike price",
+      "note": "string — scenario-framed note about this strike's OI significance"
+    }
+  ],
+  "confidence": "number 0.0–1.0 based on data completeness",
+  "dataAvailable": "boolean"
+}`;
+
+    const userMessage = `
+<option_chain_metrics>
+${JSON.stringify(req.marketData ?? {}, null, 2)}
+</option_chain_metrics>
+
+Write the option chain interpretation. Return JSON matching exactly:
+${OPTION_CHAIN_SCHEMA}
+`;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const raw = await this.callChatCompletion(this.researchModel, SYSTEM_PROMPT_OPTIONS, userMessage);
+      const parsed = OptionChainInterpretationResponseSchema.safeParse(JSON.parse(raw));
+      if (parsed.success) return parsed.data;
+      if (attempt === 1) throw new Error('Option chain interpretation failed schema validation after 2 attempts');
     }
     throw new Error('unreachable');
   }

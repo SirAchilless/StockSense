@@ -194,6 +194,70 @@ export async function runNewsSentimentPipeline(
   return results;
 }
 
+// ── Option Chain Interpretation Pipeline (Phase 3.1) ─────────────────────────
+// Grounding: PCR, max pain, IV percentile, and OI concentrations are computed
+// deterministically by lib/options-greeks.ts. The AI only narrates over those
+// numbers — scenario-framed, never directive.
+import type { OptionChain } from '../options/types';
+import type { OptionChainInterpretationResponse } from './types';
+
+export interface OptionChainPipelineInput {
+  chain: OptionChain;
+  aiProvider: AIProvider;
+}
+
+export interface OptionChainPipelineResult {
+  chain: OptionChain;
+  interpretation: OptionChainInterpretationResponse;
+  disclaimer: string;
+}
+
+export async function runOptionChainPipeline(
+  input: OptionChainPipelineInput,
+): Promise<OptionChainPipelineResult> {
+  const { chain, aiProvider } = input;
+
+  // Build top OI strike lists — used as AI grounding inputs, not invented by AI
+  const sortedByCallOI = [...chain.strikes].sort((a, b) => b.call.oi - a.call.oi);
+  const sortedByPutOI = [...chain.strikes].sort((a, b) => b.put.oi - a.put.oi);
+
+  const marketData = {
+    symbol: chain.symbol,
+    underlyingPrice: chain.underlyingPrice,
+    atmStrike: chain.atmStrike,
+    expiry: chain.expiry,
+    daysToExpiry: chain.daysToExpiry,
+    pcrOI: chain.pcrOI,
+    pcrVolume: chain.pcrVolume,
+    maxPainStrike: chain.maxPainStrike,
+    ivPercentile: chain.ivPercentile,
+    totalCallOI: chain.totalCallOI,
+    totalPutOI: chain.totalPutOI,
+    // Top 4 OI concentrations for key-level notes
+    topCallStrikes: sortedByCallOI.slice(0, 4).map((r) => ({
+      strikePrice: r.strikePrice,
+      oi: r.call.oi,
+      oiChange: r.call.oiChange,
+      iv: r.call.iv,
+    })),
+    topPutStrikes: sortedByPutOI.slice(0, 4).map((r) => ({
+      strikePrice: r.strikePrice,
+      oi: r.put.oi,
+      oiChange: r.put.oiChange,
+      iv: r.put.iv,
+    })),
+    fetchedAt: chain.dataAsOf,
+  };
+
+  const interpretation = await aiProvider.generateOptionChainInterpretation({
+    useCase: 'option_chain',
+    symbol: chain.symbol,
+    marketData,
+  });
+
+  return { chain, interpretation, disclaimer: DISCLAIMER };
+}
+
 // ── Portfolio Analysis Pipeline (Phase 2.5) ───────────────────────────────────
 // Grounding: risk/diversification scores and per-holding flags are computed
 // deterministically (lib/portfolio-risk.ts) from the user's own holdings + P&L.

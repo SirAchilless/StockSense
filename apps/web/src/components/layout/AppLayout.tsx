@@ -35,6 +35,7 @@ export function AppLayout() {
               { to: '/dashboard', label: 'Dashboard' },
               { to: '/portfolio', label: 'Portfolio' },
               { to: '/research', label: 'Research' },
+              { to: '/technical', label: 'Technical' },
             ].map(({ to, label }) => (
               <NavLink
                 key={to}

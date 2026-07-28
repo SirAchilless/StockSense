@@ -10,6 +10,7 @@ import { authRouter } from './routes/auth';
 import { marketRouter } from './routes/market';
 import { portfolioRouter } from './routes/portfolio';
 import { researchRouter } from './routes/research';
+import { technicalRouter } from './routes/technical';
 import passport from './lib/passport';
 
 const app = express();
@@ -31,6 +32,7 @@ app.use('/auth', authRouter);
 app.use('/market', marketRouter);
 app.use('/portfolio', portfolioRouter);
 app.use('/research', researchRouter);
+app.use('/technical', technicalRouter);
 
 // 404 handler
 app.use((_req, res) => {

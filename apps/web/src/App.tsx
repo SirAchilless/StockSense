@@ -7,6 +7,7 @@ import { useOAuthCallback } from './hooks/useOAuthCallback';
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage'));
 const ResearchPage = lazy(() => import('./pages/ResearchPage'));
+const TechnicalPage = lazy(() => import('./pages/TechnicalPage'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 
@@ -41,6 +42,7 @@ function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/research" element={<ResearchPage />} />
+            <Route path="/technical" element={<TechnicalPage />} />
           </Route>
 
           {/* Redirect root to dashboard */}

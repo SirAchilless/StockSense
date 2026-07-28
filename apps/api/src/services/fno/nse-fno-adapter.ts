@@ -1,23 +1,49 @@
 import axios from 'axios';
-import type { FnoDataProvider, RolloverData, FiiDerPositionSummary, ParticipantOIData, FuturesOI, FiiDerPositionDay, ParticipantOIRow } from './types';
-import { computeRolloverMetrics, computeCostOfCarry, computeFiiDerSummary } from '../../lib/fno-analytics';
+import type {
+  FnoDataProvider,
+  RolloverData,
+  FiiDerPositionSummary,
+  ParticipantOIData,
+  FuturesOI,
+  FiiDerPositionDay,
+  ParticipantOIRow,
+  PCRData,
+  OITrend,
+  CostOfCarryItem,
+} from './types';
+import {
+  computeRolloverMetrics,
+  computeCostOfCarry,
+  computeFiiDerSummary,
+  classifyOITrend,
+} from '../../lib/fno-analytics';
+import { DataUnavailableError } from '../../lib/errors';
 
 const NSE_BASE = 'https://www.nseindia.com';
 const RISK_FREE_RATE = 0.065;
 
 function daysUntil(dateStr: string): number {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const d = new Date(dateStr); d.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(dateStr);
+  d.setHours(0, 0, 0, 0);
   return Math.max(0, Math.round((d.getTime() - today.getTime()) / 86_400_000));
 }
 
 function parseNSEDate(raw: string): string {
-  try { return new Date(raw).toISOString().split('T')[0]; } catch { return raw; }
+  try {
+    return new Date(raw).toISOString().split('T')[0];
+  } catch {
+    return raw;
+  }
 }
 
 // 3-month historical average rollovers (fallback when live data unavailable)
 const AVG_ROLLOVER: Record<string, number> = {
-  NIFTY: 67.4, BANKNIFTY: 72.1, FINNIFTY: 65.8, MIDCPNIFTY: 63.2,
+  NIFTY: 67.4,
+  BANKNIFTY: 72.1,
+  FINNIFTY: 65.8,
+  MIDCPNIFTY: 63.2,
 };
 
 export class NseFnoAdapter implements FnoDataProvider {
@@ -33,7 +59,9 @@ export class NseFnoAdapter implements FnoDataProvider {
     });
     const setCookie = res.headers['set-cookie'];
     if (setCookie) {
-      this.cookies = Array.isArray(setCookie) ? setCookie.map((c) => c.split(';')[0]).join('; ') : '';
+      this.cookies = Array.isArray(setCookie)
+        ? setCookie.map((c) => c.split(';')[0]).join('; ')
+        : '';
       this.lastCookieRefresh = now;
     }
   }
@@ -54,10 +82,27 @@ export class NseFnoAdapter implements FnoDataProvider {
   }
 
   getSupportedSymbols(): string[] {
-    return ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY',
-      'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK',
-      'SBIN', 'WIPRO', 'LT', 'AXISBANK', 'KOTAKBANK',
-      'BAJFINANCE', 'MARUTI', 'TATAMOTORS', 'SUNPHARMA', 'HINDUNILVR'];
+    return [
+      'NIFTY',
+      'BANKNIFTY',
+      'FINNIFTY',
+      'MIDCPNIFTY',
+      'RELIANCE',
+      'TCS',
+      'HDFCBANK',
+      'INFY',
+      'ICICIBANK',
+      'SBIN',
+      'WIPRO',
+      'LT',
+      'AXISBANK',
+      'KOTAKBANK',
+      'BAJFINANCE',
+      'MARUTI',
+      'TATAMOTORS',
+      'SUNPHARMA',
+      'HINDUNILVR',
+    ];
   }
 
   async getRolloverData(symbol: string): Promise<RolloverData> {
@@ -68,11 +113,17 @@ export class NseFnoAdapter implements FnoDataProvider {
 
     const spotPrice: number = data.underlyingValue ?? data.lastPrice ?? 0;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const futRows: any[] = (data.stocks ?? []).filter((s: any) => s.metadata?.instrumentType === 'Stock Futures'
-      || s.metadata?.instrumentType === 'Index Futures');
+    const futRows: any[] = (data.stocks ?? []).filter(
+      (s: any) =>
+        s.metadata?.instrumentType === 'Stock Futures' ||
+        s.metadata?.instrumentType === 'Index Futures'
+    );
 
     // Group by expiry
-    const expiryMap = new Map<string, { oi: number; ltp: number; oiChange: number; volume: number }>();
+    const expiryMap = new Map<
+      string,
+      { oi: number; ltp: number; oiChange: number; volume: number }
+    >();
     for (const row of futRows) {
       const expiry = parseNSEDate(row.metadata?.expiryDate ?? '');
       if (!expiry) continue;
@@ -81,7 +132,12 @@ export class NseFnoAdapter implements FnoDataProvider {
       const oiChange: number = row.marketDeptOrderBook?.tradeInfo?.changeinOpenInterest ?? 0;
       const volume: number = row.marketDeptOrderBook?.tradeInfo?.tradedVolume ?? 0;
       const prev = expiryMap.get(expiry) ?? { oi: 0, ltp, oiChange: 0, volume: 0 };
-      expiryMap.set(expiry, { oi: prev.oi + oi, ltp, oiChange: prev.oiChange + oiChange, volume: prev.volume + volume });
+      expiryMap.set(expiry, {
+        oi: prev.oi + oi,
+        ltp,
+        oiChange: prev.oiChange + oiChange,
+        volume: prev.volume + volume,
+      });
     }
 
     const sortedExpiries = [...expiryMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
@@ -180,5 +236,137 @@ export class NseFnoAdapter implements FnoDataProvider {
       date: data?.date ? parseNSEDate(data.date) : new Date().toISOString().split('T')[0],
       dataAsOf: new Date().toISOString(),
     };
+  }
+
+  async getCostOfCarry(symbol: string): Promise<CostOfCarryItem[]> {
+    try {
+      const upper = symbol.toUpperCase();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await this.fetchNSE<any>(`${NSE_BASE}/api/quote-derivative`, { symbol: upper });
+      const spotPrice: number = data.underlyingValue ?? data.lastPrice ?? 0;
+      if (!spotPrice) {
+        throw new DataUnavailableError(`Spot price unavailable for ${upper}`, {
+          retryable: true,
+          source: 'nse',
+        });
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const futRows: any[] = (data.stocks ?? []).filter(
+        (s: any) =>
+          s.metadata?.instrumentType === 'Index Futures' ||
+          s.metadata?.instrumentType === 'Stock Futures'
+      );
+      const expiryMap = new Map<string, { ltp: number; oi: number }>();
+      for (const row of futRows) {
+        const expiry = parseNSEDate(row.metadata?.expiryDate ?? '');
+        if (!expiry) continue;
+        const ltp: number = row.lastPrice ?? spotPrice;
+        const oi: number = row.marketDeptOrderBook?.tradeInfo?.openInterest ?? 0;
+        expiryMap.set(expiry, { ltp, oi });
+      }
+      const sortedExpiries = [...expiryMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+      return sortedExpiries.map(([expiry, d]) => {
+        const daysToExpiry = daysUntil(expiry);
+        return {
+          symbol: upper,
+          expiry,
+          spotPrice,
+          futuresPrice: d.ltp,
+          costOfCarryPct: computeCostOfCarry(d.ltp, spotPrice, daysToExpiry),
+          daysToExpiry,
+        };
+      });
+    } catch (err) {
+      if (err instanceof DataUnavailableError) throw err;
+      const { MockFnoAdapter } = await import('./mock-fno-adapter');
+      return new MockFnoAdapter().getCostOfCarry(symbol);
+    }
+  }
+
+  async getOITrends(symbol: string, expiry?: string): Promise<OITrend[]> {
+    try {
+      const upper = symbol.toUpperCase();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await this.fetchNSE<any>(`${NSE_BASE}/api/quote-derivative`, { symbol: upper });
+      const spotPrice: number = data.underlyingValue ?? data.lastPrice ?? 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const futRows: any[] = (data.stocks ?? []).filter(
+        (s: any) =>
+          s.metadata?.instrumentType === 'Index Futures' ||
+          s.metadata?.instrumentType === 'Stock Futures'
+      );
+      const results: OITrend[] = [];
+      for (const row of futRows) {
+        const exp = parseNSEDate(row.metadata?.expiryDate ?? '');
+        if (!exp || (expiry && exp !== expiry)) continue;
+        const currentOI: number = row.marketDeptOrderBook?.tradeInfo?.openInterest ?? 0;
+        const oiChange: number = row.marketDeptOrderBook?.tradeInfo?.changeinOpenInterest ?? 0;
+        const priceChange: number = row.change ?? 0;
+        results.push({
+          symbol: upper,
+          expiry: exp,
+          currentOI,
+          previousOI: currentOI - oiChange,
+          oiChange,
+          priceChange,
+          classification: classifyOITrend({ oiChange, priceChange }),
+        });
+      }
+      if (!results.length) {
+        const { MockFnoAdapter } = await import('./mock-fno-adapter');
+        return new MockFnoAdapter().getOITrends(symbol, expiry);
+      }
+      return results;
+    } catch (err) {
+      if (err instanceof DataUnavailableError) throw err;
+      const { MockFnoAdapter } = await import('./mock-fno-adapter');
+      return new MockFnoAdapter().getOITrends(symbol, expiry);
+    }
+  }
+
+  async getPCR(symbol: string, expiry?: string): Promise<PCRData> {
+    try {
+      const upper = symbol.toUpperCase();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await this.fetchNSE<any>(`${NSE_BASE}/api/option-chain-indices`, {
+        symbol: upper,
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const records: any[] = data?.records?.data ?? [];
+      let totalCallOI = 0;
+      let totalPutOI = 0;
+      let totalCallVol = 0;
+      let totalPutVol = 0;
+      for (const r of records) {
+        if (expiry && r.expiryDate !== expiry) continue;
+        totalCallOI += r.CE?.openInterest ?? 0;
+        totalPutOI += r.PE?.openInterest ?? 0;
+        totalCallVol += r.CE?.totalTradedVolume ?? 0;
+        totalPutVol += r.PE?.totalTradedVolume ?? 0;
+      }
+      if (!totalCallOI) {
+        const { MockFnoAdapter } = await import('./mock-fno-adapter');
+        return new MockFnoAdapter().getPCR(symbol, expiry);
+      }
+      return {
+        symbol: upper,
+        expiry: expiry ?? 'ALL',
+        pcrOI: +(totalPutOI / totalCallOI).toFixed(4),
+        pcrVolume: totalCallVol > 0 ? +(totalPutVol / totalCallVol).toFixed(4) : 0,
+        timestamp: new Date().toISOString(),
+      };
+    } catch {
+      const { MockFnoAdapter } = await import('./mock-fno-adapter');
+      return new MockFnoAdapter().getPCR(symbol, expiry);
+    }
+  }
+
+  async getMarketWidePCR(): Promise<PCRData[]> {
+    const indexSymbols = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY'];
+    return Promise.all(indexSymbols.map((s) => this.getPCR(s)));
+  }
+
+  async getMarketWideRollover(): Promise<RolloverData[]> {
+    return Promise.all(this.getSupportedSymbols().map((s) => this.getRolloverData(s)));
   }
 }

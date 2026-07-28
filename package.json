@@ -6,14 +6,22 @@
     "build": "pnpm --filter api build && pnpm --filter web build",
     "lint": "pnpm --filter api lint && pnpm --filter web lint",
     "test": "pnpm --filter api test && pnpm --filter web test",
-    "format": "prettier --write \"**/*.{ts,tsx,js,json,css,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,css,md}\"",
+    "prepare": "husky"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.2.0",
     "prettier": "^3.2.5"
   },
   "engines": {
     "node": ">=20",
     "pnpm": ">=9"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,json,css,md}": [
+      "node_modules/.bin/prettier --write"
+    ]
   }
 }

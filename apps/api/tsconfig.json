@@ -5,7 +5,9 @@
     "moduleResolution": "node",
     "outDir": "dist",
     "rootDir": "src",
-    "target": "ES2022"
+    "target": "ES2022",
+    "declaration": false,
+    "declarationMap": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

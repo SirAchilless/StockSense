@@ -6,29 +6,29 @@ import { z } from 'zod';
 
 export interface FuturesOI {
   symbol: string;
-  expiry: string;           // YYYY-MM-DD
-  openInterest: number;     // contracts
-  oiChange: number;         // OI change from previous session
-  ltp: number;              // last traded price
-  basis: number;            // ltp - spotPrice (premium/discount)
-  costOfCarry: number;      // annualised CoC in % = (basis / spotPrice) * (365 / daysToExpiry) * 100
+  expiry: string; // YYYY-MM-DD
+  openInterest: number; // contracts
+  oiChange: number; // OI change from previous session
+  ltp: number; // last traded price
+  basis: number; // ltp - spotPrice (premium/discount)
+  costOfCarry: number; // annualised CoC in % = (basis / spotPrice) * (365 / daysToExpiry) * 100
   volume: number;
 }
 
 export interface RolloverData {
   symbol: string;
   spotPrice: number;
-  currentExpiry: string;   // expiry being rolled from
-  nextExpiry: string;      // expiry being rolled into
+  currentExpiry: string; // expiry being rolled from
+  nextExpiry: string; // expiry being rolled into
   daysToCurrentExpiry: number;
   currentMonthOI: number;
   nextMonthOI: number;
   totalFuturesOI: number;
   rolloverPercent: number; // nextMonthOI / totalFuturesOI * 100
-  costOfCarryCurrent: number;  // annualised %
+  costOfCarryCurrent: number; // annualised %
   costOfCarryNext: number;
-  threeMonthAvgRollover: number;  // historical average (mock: fixed per symbol)
-  rolloverVsAvgDiff: number;      // rolloverPercent - threeMonthAvgRollover
+  threeMonthAvgRollover: number; // historical average (mock: fixed per symbol)
+  rolloverVsAvgDiff: number; // rolloverPercent - threeMonthAvgRollover
   allExpiries: FuturesOI[];
   dataAsOf: string;
 }
@@ -38,12 +38,12 @@ export interface RolloverData {
 // separately), stock options, and DII index futures.
 
 export interface FiiDerPositionDay {
-  date: string;                  // YYYY-MM-DD
+  date: string; // YYYY-MM-DD
   // Index Futures
-  fiiIndexFutLongOI: number;     // contracts
+  fiiIndexFutLongOI: number; // contracts
   fiiIndexFutShortOI: number;
-  fiiIndexFutNetOI: number;      // long - short
-  fiiIndexFutNetBuy: number;     // crores INR
+  fiiIndexFutNetOI: number; // long - short
+  fiiIndexFutNetBuy: number; // crores INR
   // Stock Futures
   fiiStockFutLongOI: number;
   fiiStockFutShortOI: number;
@@ -63,7 +63,7 @@ export interface FiiDerPositionDay {
 }
 
 export interface FiiDerPositionSummary {
-  series: FiiDerPositionDay[];    // last 10 trading days, chronological
+  series: FiiDerPositionDay[]; // last 10 trading days, chronological
   latestDate: string;
   // Rolling sums (last 5 days) — derived deterministically
   fiiNetFuturesBuy5d: number;
@@ -72,7 +72,7 @@ export interface FiiDerPositionSummary {
   // Latest OI snapshot
   latestFiiIndexFutNetOI: number;
   latestFiiStockFutNetOI: number;
-  latestFiiIndexPCR: number;    // fiiIndexCallOI / fiiIndexPutOI
+  latestFiiIndexPCR: number; // fiiIndexCallOI / fiiIndexPutOI
   dataAsOf: string;
 }
 
@@ -108,12 +108,53 @@ export interface FnoIntelligenceData {
   participantOI: ParticipantOIData;
 }
 
+// ── PCR (Put-Call Ratio) data ─────────────────────────────────────────────────
+
+export interface PCRData {
+  symbol: string;
+  expiry: string | 'ALL';
+  pcrOI: number;
+  pcrVolume: number;
+  timestamp: string;
+}
+
+// ── OI Trend per expiry ───────────────────────────────────────────────────────
+
+export type OITrendClassification =
+  'LONG_BUILDUP' | 'SHORT_BUILDUP' | 'LONG_UNWINDING' | 'SHORT_UNWINDING';
+
+export interface OITrend {
+  symbol: string;
+  expiry: string;
+  currentOI: number;
+  previousOI: number;
+  oiChange: number;
+  priceChange: number;
+  classification: OITrendClassification;
+}
+
+// ── Cost of carry per expiry ──────────────────────────────────────────────────
+
+export interface CostOfCarryItem {
+  symbol: string;
+  expiry: string;
+  spotPrice: number;
+  futuresPrice: number;
+  costOfCarryPct: number; // annualized %
+  daysToExpiry: number;
+}
+
 // ── Provider interface ────────────────────────────────────────────────────────
 
 export interface FnoDataProvider {
   getRolloverData(symbol: string): Promise<RolloverData>;
+  getMarketWideRollover(): Promise<RolloverData[]>;
   getFiiDerPositions(): Promise<FiiDerPositionSummary>;
   getParticipantOI(): Promise<ParticipantOIData>;
+  getCostOfCarry(symbol: string): Promise<CostOfCarryItem[]>;
+  getOITrends(symbol: string, expiry?: string): Promise<OITrend[]>;
+  getPCR(symbol: string, expiry?: string): Promise<PCRData>;
+  getMarketWidePCR(): Promise<PCRData[]>;
   getSupportedSymbols(): string[];
 }
 
@@ -121,9 +162,21 @@ export interface FnoDataProvider {
 
 export const FNO_INDEX_SYMBOLS = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY'] as const;
 export const FNO_STOCK_SYMBOLS = [
-  'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK',
-  'SBIN', 'WIPRO', 'LT', 'AXISBANK', 'KOTAKBANK',
-  'BAJFINANCE', 'MARUTI', 'TATAMOTORS', 'SUNPHARMA', 'HINDUNILVR',
+  'RELIANCE',
+  'TCS',
+  'HDFCBANK',
+  'INFY',
+  'ICICIBANK',
+  'SBIN',
+  'WIPRO',
+  'LT',
+  'AXISBANK',
+  'KOTAKBANK',
+  'BAJFINANCE',
+  'MARUTI',
+  'TATAMOTORS',
+  'SUNPHARMA',
+  'HINDUNILVR',
 ] as const;
 export const ALL_FNO_SYMBOLS: readonly string[] = [...FNO_INDEX_SYMBOLS, ...FNO_STOCK_SYMBOLS];
 

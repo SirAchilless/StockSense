@@ -1,0 +1,10 @@
+{
+  "name": "@stocksense/market-data",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/interfaces/index.ts",
+  "types": "./src/interfaces/index.ts",
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

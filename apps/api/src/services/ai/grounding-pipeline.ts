@@ -15,9 +15,12 @@ export interface ResearchPipelineResult {
   symbol: string;
 }
 
-export const DISCLAIMER = 'AI-generated research for informational purposes only. This is not investment advice. No human analyst review. StockSense is not a SEBI-registered investment adviser or research analyst.';
+export const DISCLAIMER =
+  'AI-generated research for informational purposes only. This is not investment advice. No human analyst review. StockSense is not a SEBI-registered investment adviser or research analyst.';
 
-export async function runResearchPipeline(input: ResearchPipelineInput): Promise<ResearchPipelineResult> {
+export async function runResearchPipeline(
+  input: ResearchPipelineInput
+): Promise<ResearchPipelineResult> {
   const { symbol, marketDataProvider, aiProvider } = input;
 
   // Step 1-2: Identify + fetch required data
@@ -119,16 +122,19 @@ export interface ChatPipelineInput {
   aiProvider: AIProvider;
 }
 
-export async function runChatPipeline(input: ChatPipelineInput): Promise<ChatResponse & { disclaimer?: string }> {
+export async function runChatPipeline(
+  input: ChatPipelineInput
+): Promise<Omit<ChatResponse, 'disclaimer'> & { disclaimer?: string }> {
   const { userMessage, context, aiProvider } = input;
   const response = await aiProvider.generateChatReply({
     useCase: 'chat',
     userMessage,
     marketData: context,
   });
+  const { disclaimer: hasDisclaimer, ...rest } = response;
   return {
-    ...response,
-    disclaimer: response.disclaimer ? DISCLAIMER : undefined,
+    ...rest,
+    disclaimer: hasDisclaimer ? DISCLAIMER : undefined,
   };
 }
 
@@ -213,7 +219,7 @@ export interface OptionChainPipelineResult {
 }
 
 export async function runOptionChainPipeline(
-  input: OptionChainPipelineInput,
+  input: OptionChainPipelineInput
 ): Promise<OptionChainPipelineResult> {
   const { chain, aiProvider } = input;
 
@@ -281,7 +287,7 @@ export interface PortfolioAnalysisPipelineResult {
 }
 
 export async function runPortfolioAnalysisPipeline(
-  input: PortfolioAnalysisPipelineInput,
+  input: PortfolioAnalysisPipelineInput
 ): Promise<PortfolioAnalysisPipelineResult> {
   const { holdings, marketDataProvider, aiProvider } = input;
   const dataAsOf = new Date().toISOString();
@@ -290,7 +296,7 @@ export async function runPortfolioAnalysisPipeline(
   // Missing sectors degrade gracefully to 'Unknown' rather than being guessed.
   const uniqueSymbols = [...new Set(holdings.map((h) => h.symbol))];
   const sectorResults = await Promise.allSettled(
-    uniqueSymbols.map((sym) => marketDataProvider.getStockFundamentals(sym)),
+    uniqueSymbols.map((sym) => marketDataProvider.getStockFundamentals(sym))
   );
   const sectorMap = new Map<string, string | null>();
   sectorResults.forEach((r, i) => {
@@ -320,7 +326,12 @@ export async function runPortfolioAnalysisPipeline(
 // Grounding: rollover %, cost of carry, FII/DII net OI, participant metrics are
 // all computed deterministically (lib/fno-analytics.ts) before the AI call.
 // The AI only narrates — scenario-framed, never directive, never re-emitting numbers.
-import type { FnoDataProvider, RolloverData, FiiDerPositionSummary, ParticipantOIData } from '../fno/types';
+import type {
+  FnoDataProvider,
+  RolloverData,
+  FiiDerPositionSummary,
+  ParticipantOIData,
+} from '../fno/types';
 import type { FnoInterpretationResponse } from './types';
 import { computeParticipantMetrics } from '../../lib/fno-analytics';
 
@@ -390,5 +401,12 @@ export async function runFnoPipeline(input: FnoPipelineInput): Promise<FnoPipeli
     marketData,
   });
 
-  return { rollover, fiiPositions, participantOI, interpretation, disclaimer: DISCLAIMER, dataAsOf };
+  return {
+    rollover,
+    fiiPositions,
+    participantOI,
+    interpretation,
+    disclaimer: DISCLAIMER,
+    dataAsOf,
+  };
 }

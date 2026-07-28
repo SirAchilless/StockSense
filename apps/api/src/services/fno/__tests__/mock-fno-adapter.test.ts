@@ -135,4 +135,97 @@ describe('MockFnoAdapter', () => {
       expect(p.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
   });
+
+  describe('getCostOfCarry', () => {
+    it('returns array with at least 2 expiries for NIFTY', async () => {
+      const items = await adapter.getCostOfCarry('NIFTY');
+      expect(items.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('each item has positive spotPrice and futuresPrice', async () => {
+      const items = await adapter.getCostOfCarry('BANKNIFTY');
+      for (const item of items) {
+        expect(item.spotPrice).toBeGreaterThan(0);
+        expect(item.futuresPrice).toBeGreaterThan(0);
+      }
+    });
+
+    it('costOfCarryPct is a number', async () => {
+      const items = await adapter.getCostOfCarry('NIFTY');
+      for (const item of items) {
+        expect(typeof item.costOfCarryPct).toBe('number');
+      }
+    });
+  });
+
+  describe('getOITrends', () => {
+    it('returns array of OI trends for NIFTY', async () => {
+      const trends = await adapter.getOITrends('NIFTY');
+      expect(trends.length).toBeGreaterThan(0);
+    });
+
+    it('each trend has a valid classification', async () => {
+      const trends = await adapter.getOITrends('NIFTY');
+      const valid = ['LONG_BUILDUP', 'SHORT_BUILDUP', 'LONG_UNWINDING', 'SHORT_UNWINDING'];
+      for (const t of trends) {
+        expect(valid).toContain(t.classification);
+      }
+    });
+
+    it('oiChange = currentOI - previousOI', async () => {
+      const trends = await adapter.getOITrends('NIFTY');
+      for (const t of trends) {
+        expect(t.oiChange).toBeCloseTo(t.currentOI - t.previousOI, 0);
+      }
+    });
+  });
+
+  describe('getPCR', () => {
+    it('returns PCRData with positive pcrOI for NIFTY', async () => {
+      const pcr = await adapter.getPCR('NIFTY');
+      expect(pcr.symbol).toBe('NIFTY');
+      expect(pcr.pcrOI).toBeGreaterThan(0);
+    });
+
+    it('pcrOI and pcrVolume are numbers', async () => {
+      const pcr = await adapter.getPCR('BANKNIFTY');
+      expect(typeof pcr.pcrOI).toBe('number');
+      expect(typeof pcr.pcrVolume).toBe('number');
+    });
+
+    it('expiry defaults to ALL when not provided', async () => {
+      const pcr = await adapter.getPCR('NIFTY');
+      expect(pcr.expiry).toBe('ALL');
+    });
+  });
+
+  describe('getMarketWidePCR', () => {
+    it('returns PCR for all index symbols', async () => {
+      const pcrs = await adapter.getMarketWidePCR();
+      expect(pcrs.length).toBeGreaterThanOrEqual(4);
+    });
+
+    it('all symbols are known index symbols', async () => {
+      const pcrs = await adapter.getMarketWidePCR();
+      const indexSyms = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY'];
+      for (const p of pcrs) {
+        expect(indexSyms).toContain(p.symbol);
+      }
+    });
+  });
+
+  describe('getMarketWideRollover', () => {
+    it('returns rollover data for all supported symbols', async () => {
+      const rollovers = await adapter.getMarketWideRollover();
+      expect(rollovers.length).toBe(adapter.getSupportedSymbols().length);
+    });
+
+    it('each rollover has a valid rolloverPercent', async () => {
+      const rollovers = await adapter.getMarketWideRollover();
+      for (const r of rollovers) {
+        expect(r.rolloverPercent).toBeGreaterThanOrEqual(0);
+        expect(r.rolloverPercent).toBeLessThanOrEqual(100);
+      }
+    });
+  });
 });

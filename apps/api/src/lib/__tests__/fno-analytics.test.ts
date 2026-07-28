@@ -4,6 +4,7 @@ import {
   computeCostOfCarry,
   computeFiiDerSummary,
   computeParticipantMetrics,
+  classifyOITrend,
 } from '../fno-analytics';
 import type { FiiDerPositionDay, ParticipantOIRow } from '../../services/fno/types';
 
@@ -126,7 +127,7 @@ describe('computeFiiDerSummary', () => {
 
   it('5d net buy sums last 5 sessions', () => {
     const series = Array.from({ length: 7 }, (_, i) =>
-      makeDayStub(`2026-07-${String(i + 20).padStart(2, '0')}`, 1000, 200),
+      makeDayStub(`2026-07-${String(i + 20).padStart(2, '0')}`, 1000, 200)
     );
     const s = computeFiiDerSummary(series);
     // last 5 days: fiiIndexFutNetBuy + fiiStockFutNetBuy = 1000 + 1000 = 2000 each day × 5
@@ -155,27 +156,55 @@ function makeParticipantRows(): ParticipantOIRow[] {
   return [
     {
       category: 'FII',
-      indexFutLong: 284_000, indexFutShort: 238_000, indexFutNetLong: 46_000,
-      stockFutLong: 425_000, stockFutShort: 378_000, stockFutNetLong: 47_000,
-      indexCallOI: 182_000, indexPutOI: 214_000, stockCallOI: 95_000, stockPutOI: 88_000,
+      indexFutLong: 284_000,
+      indexFutShort: 238_000,
+      indexFutNetLong: 46_000,
+      stockFutLong: 425_000,
+      stockFutShort: 378_000,
+      stockFutNetLong: 47_000,
+      indexCallOI: 182_000,
+      indexPutOI: 214_000,
+      stockCallOI: 95_000,
+      stockPutOI: 88_000,
     },
     {
       category: 'DII',
-      indexFutLong: 122_000, indexFutShort: 108_000, indexFutNetLong: 14_000,
-      stockFutLong: 98_000, stockFutShort: 91_000, stockFutNetLong: 7_000,
-      indexCallOI: 42_000, indexPutOI: 38_000, stockCallOI: 28_000, stockPutOI: 24_000,
+      indexFutLong: 122_000,
+      indexFutShort: 108_000,
+      indexFutNetLong: 14_000,
+      stockFutLong: 98_000,
+      stockFutShort: 91_000,
+      stockFutNetLong: 7_000,
+      indexCallOI: 42_000,
+      indexPutOI: 38_000,
+      stockCallOI: 28_000,
+      stockPutOI: 24_000,
     },
     {
       category: 'PRO',
-      indexFutLong: 380_000, indexFutShort: 392_000, indexFutNetLong: -12_000,
-      stockFutLong: 560_000, stockFutShort: 574_000, stockFutNetLong: -14_000,
-      indexCallOI: 620_000, indexPutOI: 580_000, stockCallOI: 310_000, stockPutOI: 295_000,
+      indexFutLong: 380_000,
+      indexFutShort: 392_000,
+      indexFutNetLong: -12_000,
+      stockFutLong: 560_000,
+      stockFutShort: 574_000,
+      stockFutNetLong: -14_000,
+      indexCallOI: 620_000,
+      indexPutOI: 580_000,
+      stockCallOI: 310_000,
+      stockPutOI: 295_000,
     },
     {
       category: 'CLIENT',
-      indexFutLong: 890_000, indexFutShort: 938_000, indexFutNetLong: -48_000,
-      stockFutLong: 1_240_000, stockFutShort: 1_295_000, stockFutNetLong: -55_000,
-      indexCallOI: 1_100_000, indexPutOI: 1_050_000, stockCallOI: 680_000, stockPutOI: 640_000,
+      indexFutLong: 890_000,
+      indexFutShort: 938_000,
+      indexFutNetLong: -48_000,
+      stockFutLong: 1_240_000,
+      stockFutShort: 1_295_000,
+      stockFutNetLong: -55_000,
+      indexCallOI: 1_100_000,
+      indexPutOI: 1_050_000,
+      stockCallOI: 680_000,
+      stockPutOI: 640_000,
     },
   ];
 }
@@ -218,5 +247,25 @@ describe('computeParticipantMetrics', () => {
   it('proNetLong reflects PRO net position', () => {
     const m = computeParticipantMetrics(makeParticipantRows());
     expect(m.proNetLong).toBe(-12_000);
+  });
+});
+
+// ── classifyOITrend ───────────────────────────────────────────────────────────
+
+describe('classifyOITrend', () => {
+  it('rising OI + rising price → LONG_BUILDUP', () => {
+    expect(classifyOITrend({ oiChange: 5000, priceChange: 50 })).toBe('LONG_BUILDUP');
+  });
+
+  it('rising OI + falling price → SHORT_BUILDUP', () => {
+    expect(classifyOITrend({ oiChange: 5000, priceChange: -50 })).toBe('SHORT_BUILDUP');
+  });
+
+  it('falling OI + rising price → SHORT_UNWINDING', () => {
+    expect(classifyOITrend({ oiChange: -5000, priceChange: 50 })).toBe('SHORT_UNWINDING');
+  });
+
+  it('falling OI + falling price → LONG_UNWINDING', () => {
+    expect(classifyOITrend({ oiChange: -5000, priceChange: -50 })).toBe('LONG_UNWINDING');
   });
 });

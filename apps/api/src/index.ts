@@ -14,8 +14,9 @@ import { technicalRouter } from './routes/technical';
 import { chatRouter } from './routes/chat';
 import { newsRouter } from './routes/news';
 import { optionsRouter } from './routes/options';
-import { fnoRouter } from './routes/fno';
+import { fnoRouter } from './routes/fno-v2';
 import passport from './lib/passport';
+import { AppError } from './lib/errors';
 
 const app = express();
 const PORT = process.env.PORT ?? 4000;
@@ -32,25 +33,48 @@ app.use(passport.initialize());
 
 // Routes
 app.use('/health', healthRouter);
-app.use('/auth', authRouter);
-app.use('/market', marketRouter);
-app.use('/portfolio', portfolioRouter);
-app.use('/research', researchRouter);
-app.use('/technical', technicalRouter);
-app.use('/chat', chatRouter);
-app.use('/news', newsRouter);
-app.use('/options', optionsRouter);
-app.use('/fno', fnoRouter);
+app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/market', marketRouter);
+app.use('/api/v1/portfolio', portfolioRouter);
+app.use('/api/v1/research', researchRouter);
+app.use('/api/v1/technical', technicalRouter);
+app.use('/api/v1/chat', chatRouter);
+app.use('/api/v1/news', newsRouter);
+app.use('/api/v1/options', optionsRouter);
+app.use('/api/v1/fno', fnoRouter);
+
+// Legacy /fno, /auth, etc. paths for backward compatibility with the existing web app
+import { fnoRouter as fnoRouterLegacy } from './routes/fno';
+app.use('/fno', fnoRouterLegacy);
 
 // 404 handler
 app.use((_req, res) => {
-  res.status(404).json({ error: 'Not found' });
+  res.status(404).json({
+    error: { code: 'NOT_FOUND', message: 'Not found', retryable: false },
+  });
 });
 
-// Global error handler
+// Global error handler — translates AppError (and unknown) into the standard
+// error envelope. Never leaks stack traces in production.
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Internal server error' });
+  if (err instanceof AppError) {
+    const body: { error: Record<string, unknown> } = {
+      error: { code: err.code, message: err.message, retryable: err.retryable },
+    };
+    if (err.details && Object.keys(err.details).length > 0) {
+      body.error.details = err.details;
+    }
+    res.status(err.status).json(body);
+    return;
+  }
+  console.error('[unhandled]', err);
+  res.status(500).json({
+    error: {
+      code: 'INTERNAL_ERROR',
+      message: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+      retryable: false,
+    },
+  });
 });
 
 app.listen(PORT, () => {

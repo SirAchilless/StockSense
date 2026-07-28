@@ -70,8 +70,10 @@ describe('runResearchPipeline', () => {
 
   it('always attaches the disclaimer', async () => {
     const result = await runResearchPipeline({ symbol: 'TCS', marketDataProvider, aiProvider });
-    expect(result.disclaimer).toContain('not investment advice');
+    // Exact SEBI compliance disclaimer (Constraint 2.2)
+    expect(result.disclaimer).toMatch(/Not investment advice/i);
     expect(result.disclaimer).toContain('SEBI');
+    expect(result.disclaimer).toBe(DISCLAIMER);
   });
 });
 

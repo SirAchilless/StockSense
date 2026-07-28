@@ -47,12 +47,16 @@ const config: Config = {
         },
         // Finance-specific semantic colors
         gain: {
-          DEFAULT: 'hsl(142 76% 36%)',
-          muted: 'hsl(142 76% 36% / 0.15)',
+          DEFAULT: 'hsl(var(--gain) / <alpha-value>)',
+          muted: 'hsl(var(--gain) / 0.15)',
         },
         loss: {
-          DEFAULT: 'hsl(0 84% 60%)',
-          muted: 'hsl(0 84% 60% / 0.15)',
+          DEFAULT: 'hsl(var(--loss) / <alpha-value>)',
+          muted: 'hsl(var(--loss) / 0.15)',
+        },
+        warning: {
+          DEFAULT: 'hsl(var(--warning) / <alpha-value>)',
+          muted: 'hsl(var(--warning) / 0.15)',
         },
         neutral: {
           DEFAULT: 'hsl(var(--muted-foreground))',

@@ -1,7 +1,7 @@
 import type {
   MarketDataProvider, IndexSymbol, IndexQuote, MarketStatusInfo,
   StockQuote, StockFundamentals, OHLCBar, Timeframe,
-  GlobalSymbol, GlobalQuote, GlobalCategory,
+  GlobalSymbol, GlobalQuote,
   MarketBreadthData, BreadthStock, FiiDiiActivity,
 } from './types';
 

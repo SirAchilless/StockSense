@@ -1,6 +1,6 @@
 import type { MarketDataProvider } from '../market-data/types';
 import type { AIProvider } from './types';
-import type { ResearchResponse, ChatResponse } from './types';
+import type { ResearchResponse } from './types';
 
 export interface ResearchPipelineInput {
   symbol: string;
@@ -15,7 +15,12 @@ export interface ResearchPipelineResult {
   symbol: string;
 }
 
-export const DISCLAIMER = 'AI-generated research for informational purposes only. This is not investment advice. No human analyst review. StockSense is not a SEBI-registered investment adviser or research analyst.';
+// Regulation-compliant disclaimer (Constraint 2.2 — exact, non-negotiable text).
+// Every AI-generated response that could be interpreted as research / advice
+// MUST include this exact string. It is enforced at component level on the
+// frontend via the <AIDisclaimer/> component and echoed here for API consumers.
+export const DISCLAIMER =
+  'For informational purposes only. Not investment advice. AI-generated content with no human analyst review. Not SEBI-registered advisory.';
 
 export async function runResearchPipeline(input: ResearchPipelineInput): Promise<ResearchPipelineResult> {
   const { symbol, marketDataProvider, aiProvider } = input;
@@ -119,7 +124,16 @@ export interface ChatPipelineInput {
   aiProvider: AIProvider;
 }
 
-export async function runChatPipeline(input: ChatPipelineInput): Promise<ChatResponse & { disclaimer?: string }> {
+export interface ChatPipelineResult {
+  reply: string;
+  confidence: number;
+  dataAvailable: boolean;
+  // Optional disclaimer text (not a boolean) — appended only when the AI
+  // flags the reply as recommendation-shaped. Returns undefined otherwise.
+  disclaimer?: string;
+}
+
+export async function runChatPipeline(input: ChatPipelineInput): Promise<ChatPipelineResult> {
   const { userMessage, context, aiProvider } = input;
   const response = await aiProvider.generateChatReply({
     useCase: 'chat',
@@ -127,7 +141,9 @@ export async function runChatPipeline(input: ChatPipelineInput): Promise<ChatRes
     marketData: context,
   });
   return {
-    ...response,
+    reply: response.reply,
+    confidence: response.confidence,
+    dataAvailable: response.dataAvailable,
     disclaimer: response.disclaimer ? DISCLAIMER : undefined,
   };
 }
@@ -353,29 +369,48 @@ export async function runFnoPipeline(input: FnoPipelineInput): Promise<FnoPipeli
   // Step 2: derive participant metrics deterministically
   const participantMetrics = computeParticipantMetrics(participantOI.rows);
 
+  // Step 2b: validate (Constraint 2.3 VALIDATE step)
+  const missing: string[] = [];
+  if (!(rollover.rolloverPercent >= 0 && rollover.rolloverPercent <= 100)) missing.push('rolloverPercent');
+  if (fiiPositions.series.length === 0) missing.push('fiiPositions.series');
+  if (participantOI.rows.length === 0) missing.push('participantOI.rows');
+  if (missing.length > 0) {
+    // Must NOT call AI when data is incomplete. Return typed error shape.
+    return {
+      rollover,
+      fiiPositions,
+      participantOI,
+      interpretation: {
+        rolloverNote: 'Data unavailable.',
+        fiiPositioningNote: 'Data unavailable.',
+        diiPositioningNote: 'Data unavailable.',
+        costOfCarryNote: 'Data unavailable.',
+        overallNote: `Data unavailable: missing/invalid ${missing.join(', ')}.`,
+        confidence: 0,
+        dataAvailable: false,
+      },
+      disclaimer: DISCLAIMER,
+      dataAsOf,
+    };
+  }
+
   // Step 3: build grounded prompt payload — only computed numbers, never raw series
   const marketData = {
     symbol: rollover.symbol,
-    // Rollover
     rolloverPercent: rollover.rolloverPercent,
     threeMonthAvgRollover: rollover.threeMonthAvgRollover,
     rolloverVsAvgDiff: rollover.rolloverVsAvgDiff,
     currentExpiry: rollover.currentExpiry,
     nextExpiry: rollover.nextExpiry,
     daysToCurrentExpiry: rollover.daysToCurrentExpiry,
-    currentMonthOI: rollover.currentMonthOI,
-    nextMonthOI: rollover.nextMonthOI,
-    // Cost of carry
     costOfCarryCurrent: rollover.costOfCarryCurrent,
     costOfCarryNext: rollover.costOfCarryNext,
-    // FII/DII summary (aggregated, no per-day series)
     fiiIndexFutNetOI: fiiPositions.latestFiiIndexFutNetOI,
     fiiStockFutNetOI: fiiPositions.latestFiiStockFutNetOI,
     fiiNetFuturesBuy5d: fiiPositions.fiiNetFuturesBuy5d,
     fiiNetOptionsBuy5d: fiiPositions.fiiNetOptionsBuy5d,
     fiiIndexPCR: fiiPositions.latestFiiIndexPCR,
     diiNetFuturesBuy5d: fiiPositions.diiNetFuturesBuy5d,
-    // Participant positioning
     fiiLongShortRatio: participantMetrics.fiiLongShortRatio,
     fiiNetLongPct: participantMetrics.fiiNetLongPct,
     clientVsFiiContra: participantMetrics.clientVsFiiContra,
@@ -391,4 +426,96 @@ export async function runFnoPipeline(input: FnoPipelineInput): Promise<FnoPipeli
   });
 
   return { rollover, fiiPositions, participantOI, interpretation, disclaimer: DISCLAIMER, dataAsOf };
+}
+
+// ── F&O v2 AI Commentary Pipeline (Phase 3.2 C.4) ─────────────────────────────
+// Reuses the AIProvider interface — no separate inference client. Follows the
+// strict 6-step pipeline: FETCH → VALIDATE → SERIALIZE → PROMPT → RESPOND → DISCLAIM.
+import type { FnOProvider } from '@stocksense/market-data';
+import { DataUnavailableError } from '../../lib/errors';
+
+export interface FnoAICommentaryInput {
+  symbol: string;
+  metrics: string[];
+  fnoProvider: FnOProvider;
+  aiProvider: AIProvider;
+}
+
+export interface FnoAICommentaryResult {
+  commentary: string;
+  confidence: number;
+  dataAvailable: boolean;
+  disclaimer: string;
+  dataAsOf: string;
+  metricsIncluded: string[];
+}
+
+const SYSTEM_PROMPT_FNO =
+  'You are analysing F&O market data for an Indian equity/derivative symbol. ' +
+  'Reason ONLY over the data block provided below. Do not reference any price, OI, ' +
+  'PCR, rollover, or participant figure that is not present in the data. ' +
+  'If a conclusion cannot be drawn from the data provided, say so explicitly. ' +
+  'Do not issue buy, sell, target, or stop-loss recommendations. ' +
+  'Keep the response concise (150–250 words), scenario-framed, and educational.';
+
+export async function runFnoAICommentary(input: FnoAICommentaryInput): Promise<FnoAICommentaryResult> {
+  const { symbol, metrics, fnoProvider, aiProvider } = input;
+  const dataAsOf = new Date().toISOString();
+
+  // Step 1: FETCH
+  const fetched: Record<string, unknown> = { symbol, asOf: dataAsOf };
+  if (metrics.includes('rollover')) fetched.rollover = await fnoProvider.getRolloverData(symbol);
+  if (metrics.includes('participant_oi')) fetched.participantOI = await fnoProvider.getParticipantOI(dataAsOf.slice(0, 10));
+  if (metrics.includes('cost_of_carry')) fetched.costOfCarry = await fnoProvider.getCostOfCarry(symbol);
+  if (metrics.includes('oi_trends')) fetched.oiTrends = await fnoProvider.getOITrends(symbol);
+  if (metrics.includes('pcr')) fetched.pcr = await fnoProvider.getPCR(symbol);
+  if (metrics.includes('market_wide_pcr')) fetched.marketWidePCR = await fnoProvider.getMarketWidePCR();
+
+  // Step 2: VALIDATE — reject on any missing/invalid numeric field (do NOT call AI)
+  const validateNumber = (v: unknown, _field: string): boolean =>
+    typeof v === 'number' && Number.isFinite(v);
+  const errors: string[] = [];
+
+  if (metrics.includes('rollover')) {
+    const r = fetched.rollover as { rolloverPct?: number } | undefined;
+    if (!r || !validateNumber(r.rolloverPct, 'rolloverPct') || (r.rolloverPct as number) < 0 || (r.rolloverPct as number) > 100) {
+      errors.push('rolloverPct');
+    }
+  }
+  if (metrics.includes('pcr')) {
+    const p = fetched.pcr as { pcrOI?: number } | undefined;
+    if (!p || !validateNumber(p.pcrOI, 'pcrOI') || (p.pcrOI as number) <= 0) errors.push('pcrOI');
+  }
+  if (metrics.includes('participant_oi')) {
+    const po = fetched.participantOI as unknown[] | undefined;
+    if (!Array.isArray(po) || po.length === 0) errors.push('participantOI');
+  }
+
+  if (errors.length > 0) {
+    throw new DataUnavailableError(`Missing/invalid F&O data fields: ${errors.join(', ')}`, {
+      details: { fields: errors },
+    });
+  }
+
+  // Step 3: SERIALIZE
+  const marketData = JSON.parse(JSON.stringify(fetched)); // safe structured clone
+
+  // Step 4-5: PROMPT + RESPOND — reuse the same AIProvider interface via a
+  // generic completion helper (falls back to mock if no NVIDIA key set).
+  const result = await aiProvider.generateFnoInterpretation({
+    useCase: 'fno_intelligence',
+    symbol,
+    marketData: { ...marketData, _system: SYSTEM_PROMPT_FNO },
+  });
+
+  // Step 6: DISCLAIM applied at the response boundary
+  return {
+    commentary: [result.rolloverNote, result.fiiPositioningNote, result.diiPositioningNote,
+      result.costOfCarryNote, result.overallNote].filter(Boolean).join('\n\n'),
+    confidence: result.confidence,
+    dataAvailable: result.dataAvailable,
+    disclaimer: DISCLAIMER,
+    dataAsOf,
+    metricsIncluded: metrics,
+  };
 }

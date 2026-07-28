@@ -25,8 +25,11 @@ async function buildPortfolioSummary(userId: string): Promise<PortfolioSummary |
   if (!portfolio || portfolio.holdings.length === 0) return null;
 
   const provider = getMarketDataProvider();
+  type Holding = { id: string; symbol: string; quantity: number; buyPrice: number; buyDate: Date; notes?: string | null };
+  const holdings = portfolio.holdings as Holding[];
+  const symbols: string[] = [...new Set(holdings.map((h) => h.symbol))];
   const quotes = await Promise.allSettled(
-    [...new Set(portfolio.holdings.map((h) => h.symbol))].map((sym) => provider.getStockQuote(sym)),
+    symbols.map((sym: string) => provider.getStockQuote(sym)),
   );
 
   const priceMap = new Map<string, { price: number; previousClose: number }>();
@@ -36,7 +39,7 @@ async function buildPortfolioSummary(userId: string): Promise<PortfolioSummary |
     }
   });
 
-  const holdingsPnL = portfolio.holdings.map((h) => {
+  const holdingsPnL = holdings.map((h) => {
     const quote = priceMap.get(h.symbol);
     return {
       id: h.id,

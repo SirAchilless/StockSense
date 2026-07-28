@@ -301,7 +301,7 @@ export class MockAIAdapter implements AIProvider {
     const { symbol = 'index', rolloverPercent = 0, threeMonthAvgRollover = 70,
             rolloverVsAvgDiff = 0, costOfCarryCurrent = 0, costOfCarryNext = 0,
             daysToCurrentExpiry = 7, fiiIndexFutNetOI = 0, fiiNetFuturesBuy5d = 0,
-            fiiNetOptionsBuy5d = 0, fiiIndexPCR = 1, diiNetFuturesBuy5d = 0,
+            fiiNetOptionsBuy5d = 0, diiNetFuturesBuy5d = 0,
             fiiLongShortRatio = 1, clientVsFiiContra = false } = data;
 
     // Rollover note

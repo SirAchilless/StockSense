@@ -102,7 +102,7 @@ export class NseOptionsAdapter implements OptionChainProvider {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = await this.fetchNSE<any>(url, { symbol: upper });
     const records = data.records ?? {};
-    const filtered = data.filtered ?? {};
+    void (data.filtered ?? {}); // reserved for future CE/PE totals
 
     const availableExpiries: string[] = (records.expiryDates ?? []).map(parseNSEDate);
     const selectedExpiry = expiry && availableExpiries.includes(expiry) ? expiry : availableExpiries[0];

@@ -3,7 +3,7 @@ import type { FnoDataProvider, RolloverData, FiiDerPositionSummary, ParticipantO
 import { computeRolloverMetrics, computeCostOfCarry, computeFiiDerSummary } from '../../lib/fno-analytics';
 
 const NSE_BASE = 'https://www.nseindia.com';
-const RISK_FREE_RATE = 0.065;
+
 
 function daysUntil(dateStr: string): number {
   const today = new Date(); today.setHours(0, 0, 0, 0);

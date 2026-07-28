@@ -9,7 +9,7 @@ export interface AuthUser {
   createdAt: string;
 }
 
-interface AuthState {
+export interface AuthState {
   user: AuthUser | null;
   token: string | null;
   isLoading: boolean;

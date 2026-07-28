@@ -1,4 +1,4 @@
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { api } from '../../lib/api';
 import { clearCredentials } from '../../store/authSlice';
@@ -28,6 +28,28 @@ export function AppLayout() {
           <span className="text-lg font-semibold tracking-tight">
             Stock<span className="text-primary">Sense</span>
           </span>
+
+          {/* Nav links */}
+          <nav className="hidden items-center gap-1 sm:flex">
+            {[
+              { to: '/dashboard', label: 'Dashboard' },
+              { to: '/portfolio', label: 'Portfolio' },
+            ].map(({ to, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `rounded-md px-3 py-1.5 text-sm transition-colors ${
+                    isActive
+                      ? 'bg-muted text-foreground font-medium'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  }`
+                }
+              >
+                {label}
+              </NavLink>
+            ))}
+          </nav>
 
           {/* Right side: user + logout */}
           <div className="flex items-center gap-3">

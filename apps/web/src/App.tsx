@@ -5,6 +5,7 @@ import { AppLayout } from './components/layout/AppLayout';
 import { useOAuthCallback } from './hooks/useOAuthCallback';
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const PortfolioPage = lazy(() => import('./pages/PortfolioPage'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 
@@ -37,6 +38,7 @@ function App() {
           {/* Protected routes wrapped in AppLayout */}
           <Route element={<ProtectedLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/portfolio" element={<PortfolioPage />} />
           </Route>
 
           {/* Redirect root to dashboard */}

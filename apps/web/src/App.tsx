@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import ProtectedRoute from './components/ProtectedRoute';
+import { useOAuthCallback } from './hooks/useOAuthCallback';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
@@ -13,6 +14,9 @@ const Spinner = () => (
 );
 
 function App() {
+  // Handle ?token= injected by Google OAuth callback redirect
+  useOAuthCallback();
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Suspense fallback={<Spinner />}>

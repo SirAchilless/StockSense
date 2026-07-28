@@ -131,3 +131,65 @@ export async function runChatPipeline(input: ChatPipelineInput): Promise<ChatRes
     disclaimer: response.disclaimer ? DISCLAIMER : undefined,
   };
 }
+
+// ── News Sentiment Pipeline ───────────────────────────────────────────────────
+import type { NewsItem } from '../news/types';
+
+export interface NewsSentimentPipelineInput {
+  articles: NewsItem[];
+  aiProvider: AIProvider;
+}
+
+export interface ScoredNewsItem extends NewsItem {
+  // All sentiment fields guaranteed non-null after pipeline
+  sentiment: NonNullable<NewsItem['sentiment']>;
+  impact: NonNullable<NewsItem['impact']>;
+  sentimentScore: NonNullable<NewsItem['sentimentScore']>;
+  sentimentRationale: NonNullable<NewsItem['sentimentRationale']>;
+}
+
+// Process articles in batches to stay within token limits
+const BATCH_SIZE = 8;
+
+export async function runNewsSentimentPipeline(
+  input: NewsSentimentPipelineInput
+): Promise<ScoredNewsItem[]> {
+  const { articles, aiProvider } = input;
+  if (!articles.length) return [];
+
+  const results: ScoredNewsItem[] = [];
+
+  for (let i = 0; i < articles.length; i += BATCH_SIZE) {
+    const batch = articles.slice(i, i + BATCH_SIZE);
+
+    // Step 1: build minimal, token-efficient article payload
+    const articlePayload = batch.map((a) => ({
+      id: a.id,
+      title: a.title,
+      summary: a.summary.slice(0, 300), // truncate for prompt efficiency
+    }));
+
+    // Step 2: run through AI grounding pipeline
+    const response = await aiProvider.generateNewsSentiment({
+      useCase: 'news_sentiment',
+      marketData: { articles: articlePayload, fetchedAt: new Date().toISOString() },
+    });
+
+    // Step 3: merge AI scores back onto original article objects
+    const scoreMap = new Map(response.items.map((item) => [item.id, item]));
+    for (const article of batch) {
+      const score = scoreMap.get(article.id);
+      results.push({
+        ...article,
+        sentiment: score?.sentiment ?? 'neutral',
+        impact: score?.impact ?? 'low',
+        sentimentScore: score?.sentimentScore ?? 0,
+        affectedSymbols: score?.affectedSymbols ?? [],
+        affectedSectors: score?.affectedSectors ?? [],
+        sentimentRationale: score?.sentimentRationale ?? 'Sentiment could not be determined.',
+      });
+    }
+  }
+
+  return results;
+}

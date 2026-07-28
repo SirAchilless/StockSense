@@ -1,6 +1,6 @@
 import axios from 'axios';
-import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse } from './types';
-import { ResearchResponseSchema, ChatResponseSchema, GlobalNoteResponseSchema } from './types';
+import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse } from './types';
+import { ResearchResponseSchema, ChatResponseSchema, GlobalNoteResponseSchema, NewsSentimentBatchResponseSchema } from './types';
 
 const SYSTEM_PROMPT_RESEARCH = `You are a financial research assistant for Indian equity markets.
 
@@ -159,6 +159,50 @@ ${GLOBAL_NOTE_SCHEMA}
       const parsed = GlobalNoteResponseSchema.safeParse(JSON.parse(raw));
       if (parsed.success) return parsed.data;
       if (attempt === 1) throw new Error(`Global note failed schema validation after 2 attempts`);
+    }
+    throw new Error('unreachable');
+  }
+
+  async generateNewsSentiment(req: GroundedPromptRequest): Promise<NewsSentimentBatchResponse> {
+    const SYSTEM_PROMPT_SENTIMENT = `You are a financial news sentiment analyst for Indian equity markets.
+
+CRITICAL RULES:
+1. Only analyse the article titles and summaries provided in the <articles> block. Do not invent information.
+2. For each article, assess sentiment (bullish/bearish/neutral), impact (high/medium/low), a score from -1 to +1, affected NSE symbols, affected sectors, and a one-sentence rationale.
+3. affectedSymbols must only contain real NSE ticker symbols (e.g. RELIANCE, TCS). If you cannot identify any, return an empty array.
+4. affectedSectors must only contain sector names (e.g. Banking, IT, Energy). If none, return empty array.
+5. Return ONLY valid JSON. No preamble, no markdown.`;
+
+    const NEWS_SENTIMENT_SCHEMA = `{
+  "items": [
+    {
+      "id": "string — same id as provided",
+      "sentiment": "bullish | bearish | neutral",
+      "impact": "high | medium | low",
+      "sentimentScore": "number -1.0 to +1.0",
+      "affectedSymbols": ["NSE ticker strings"],
+      "affectedSectors": ["sector name strings"],
+      "sentimentRationale": "string — one sentence explanation"
+    }
+  ],
+  "confidence": "number 0.0–1.0",
+  "dataAvailable": "boolean"
+}`;
+
+    const articles = req.marketData?.articles ?? [];
+    const userMessage = `
+<articles>
+${JSON.stringify(articles, null, 2)}
+</articles>
+
+Analyse the sentiment of each article above. Return JSON matching exactly:
+${NEWS_SENTIMENT_SCHEMA}
+`;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const raw = await this.callChatCompletion(this.researchModel, SYSTEM_PROMPT_SENTIMENT, userMessage);
+      const parsed = NewsSentimentBatchResponseSchema.safeParse(JSON.parse(raw));
+      if (parsed.success) return parsed.data;
+      if (attempt === 1) throw new Error(`News sentiment failed schema validation after 2 attempts`);
     }
     throw new Error('unreachable');
   }

@@ -1,4 +1,4 @@
-import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse } from './types';
+import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse, NewsSentimentBatchResponse } from './types';
 
 export class MockAIAdapter implements AIProvider {
   async generateResearch(req: GroundedPromptRequest): Promise<ResearchResponse> {
@@ -73,5 +73,46 @@ export class MockAIAdapter implements AIProvider {
       confidence: 0.8,
       dataAvailable: true,
     };
+  }
+
+  async generateNewsSentiment(req: GroundedPromptRequest): Promise<NewsSentimentBatchResponse> {
+    const articles = (req.marketData?.articles ?? []) as Array<{
+      id: string; title: string; summary: string;
+    }>;
+
+    if (!articles.length) {
+      return { items: [], confidence: 0.1, dataAvailable: false };
+    }
+
+    // Deterministic mock: score based on presence of positive/negative keywords
+    const BULLISH_KW = ['rises', 'record', 'beats', 'growth', 'profit', 'high', 'gains', 'up', 'rally', 'positive', 'strong'];
+    const BEARISH_KW = ['falls', 'miss', 'down', 'concern', 'pressure', 'weak', 'cut', 'lower', 'decline', 'loss', 'risk'];
+
+    const items = articles.map((article) => {
+      const text = `${article.title} ${article.summary}`.toLowerCase();
+      const bullScore = BULLISH_KW.filter((kw) => text.includes(kw)).length;
+      const bearScore = BEARISH_KW.filter((kw) => text.includes(kw)).length;
+      const net = bullScore - bearScore;
+
+      const sentiment = net > 1 ? 'bullish' : net < -1 ? 'bearish' : 'neutral';
+      const sentimentScore = Math.min(1, Math.max(-1, net * 0.2));
+      const impact = Math.abs(net) >= 3 ? 'high' : Math.abs(net) >= 1 ? 'medium' : 'low';
+
+      // Extract capitalised words as potential symbols (rough heuristic for mock)
+      const symbolCandidates = (article.title.match(/\b[A-Z]{2,10}\b/g) ?? [])
+        .filter((w) => !['THE', 'AND', 'FOR', 'RBI', 'PMI', 'FII', 'DII', 'YOY', 'QOQ', 'SEBI', 'NSE', 'BSE'].includes(w));
+
+      return {
+        id: article.id,
+        sentiment: sentiment as 'bullish' | 'bearish' | 'neutral',
+        impact: impact as 'high' | 'medium' | 'low',
+        sentimentScore,
+        affectedSymbols: symbolCandidates.slice(0, 3),
+        affectedSectors: [],
+        sentimentRationale: `Mock sentiment based on keyword analysis (bull: ${bullScore}, bear: ${bearScore}).`,
+      };
+    });
+
+    return { items, confidence: 0.65, dataAvailable: true };
   }
 }

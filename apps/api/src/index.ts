@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { healthRouter } from './routes/health';
+import { authRouter } from './routes/auth';
 
 const app = express();
 const PORT = process.env.PORT ?? 4000;
@@ -21,6 +22,7 @@ app.use(cookieParser());
 
 // Routes
 app.use('/health', healthRouter);
+app.use('/auth', authRouter);
 
 // 404 handler
 app.use((_req, res) => {

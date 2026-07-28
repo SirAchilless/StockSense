@@ -9,6 +9,7 @@ import { healthRouter } from './routes/health';
 import { authRouter } from './routes/auth';
 import { marketRouter } from './routes/market';
 import { portfolioRouter } from './routes/portfolio';
+import { researchRouter } from './routes/research';
 import passport from './lib/passport';
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/health', healthRouter);
 app.use('/auth', authRouter);
 app.use('/market', marketRouter);
 app.use('/portfolio', portfolioRouter);
+app.use('/research', researchRouter);
 
 // 404 handler
 app.use((_req, res) => {

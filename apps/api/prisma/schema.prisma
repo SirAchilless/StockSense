@@ -55,3 +55,15 @@ model Holding {
 
   @@index([portfolioId])
 }
+
+model ResearchSnapshot {
+  id        String   @id @default(cuid())
+  symbol    String
+  userId    String
+  response  Json
+  dataAsOf  String
+  createdAt DateTime @default(now())
+
+  @@index([symbol, userId])
+  @@index([symbol, createdAt])
+}

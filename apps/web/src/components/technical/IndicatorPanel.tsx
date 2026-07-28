@@ -11,6 +11,9 @@ import {
 } from 'recharts';
 import type { IndicatorBar } from '../../types/technical';
 
+// Shared helpers
+
+
 interface RSIPanelProps {
   indicators: IndicatorBar[];
 }
@@ -100,6 +103,28 @@ export function MACDPanel({ indicators }: MACDPanelProps) {
           <Bar dataKey="Histogram" fill="hsl(215 20% 50%)" isAnimationActive={false} />
           <Line type="monotone" dataKey="MACD" stroke="hsl(210 100% 56%)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
           <Line type="monotone" dataKey="Signal" stroke="hsl(38 92% 50%)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ATR panel
+export function ATRPanel({ indicators }: { indicators: IndicatorBar[] }) {
+  const data = indicators
+    .filter((d) => d.atr14 !== null)
+    .map((d) => ({ time: d.time, ATR: d.atr14 as number }));
+  if (!data.length) return null;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-3">
+      <p className="mb-2 text-xs font-medium text-muted-foreground">ATR (14) — Average True Range</p>
+      <ResponsiveContainer width="100%" height={80}>
+        <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+          <XAxis dataKey="time" tickFormatter={dateTick} tick={{ fontSize: 10, fill: 'hsl(215 20% 55%)' }} tickLine={false} axisLine={false} />
+          <YAxis tick={{ fontSize: 10, fill: 'hsl(215 20% 55%)' }} tickLine={false} axisLine={false} width={36} tickFormatter={(v: number) => v.toFixed(1)} />
+          <Tooltip content={<PanelTooltip />} />
+          <Line type="monotone" dataKey="ATR" stroke="hsl(280 85% 65%)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>

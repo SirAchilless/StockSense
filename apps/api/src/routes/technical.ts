@@ -3,7 +3,10 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { authenticate } from '../middleware/authenticate';
 import { getMarketDataProvider } from '../services/market-data';
-import { sma, ema, rsi, macd } from '../lib/indicators';
+import {
+  sma, ema, rsi, macd,
+  atr, ichimoku, superTrend, fibonacci, volumeProfile, detectPatterns,
+} from '../lib/indicators';
 import type { Timeframe } from '../services/market-data/types';
 
 export const technicalRouter = Router();
@@ -46,25 +49,53 @@ technicalRouter.get('/:symbol', technicalLimiter, async (req, res) => {
       return;
     }
 
-    const closes = bars.map((b) => b.close);
+    const opens   = bars.map((b) => b.open);
+    const highs   = bars.map((b) => b.high);
+    const lows    = bars.map((b) => b.low);
+    const closes  = bars.map((b) => b.close);
+    const volumes = bars.map((b) => b.volume);
 
-    // Compute all indicators — each returns an array aligned with `bars`
-    const sma20 = sma(closes, 20);
-    const sma50 = sma(closes, 50);
-    const ema20 = ema(closes, 20);
-    const rsi14 = rsi(closes, 14);
+    // ── Phase 1 indicators ─────────────────────────────────────────────────
+    const sma20   = sma(closes, 20);
+    const sma50   = sma(closes, 50);
+    const ema20   = ema(closes, 20);
+    const rsi14   = rsi(closes, 14);
     const macdData = macd(closes, 12, 26, 9);
 
-    // Build per-bar indicator series (null where not yet computable)
+    // ── Phase 2.3 indicators ───────────────────────────────────────────────
+    const atr14          = atr(highs, lows, closes, 14);
+    const ichimokuData   = ichimoku(highs, lows, closes);
+    const superTrendData = superTrend(highs, lows, closes, 10, 3.0);
+    const fibLevels      = fibonacci(highs, lows);
+    const volProfile     = volumeProfile(highs, lows, closes, volumes, 24);
+    const patterns       = detectPatterns(opens, highs, lows, closes);
+
+    // Map pattern indices to bar times for the client
+    const patternsWithTime = patterns.map((p) => ({
+      ...p,
+      time: bars[p.index]?.time ?? null,
+    }));
+
+    // Build per-bar indicator series
     const indicatorSeries = bars.map((bar, i) => ({
       time: bar.time,
-      sma20: sma20[i],
-      sma50: sma50[i],
-      ema20: ema20[i],
-      rsi14: rsi14[i],
-      macd: macdData[i].macd,
-      macdSignal: macdData[i].signal,
+      // Phase 1
+      sma20:         sma20[i],
+      sma50:         sma50[i],
+      ema20:         ema20[i],
+      rsi14:         rsi14[i],
+      macd:          macdData[i].macd,
+      macdSignal:    macdData[i].signal,
       macdHistogram: macdData[i].histogram,
+      // Phase 2.3
+      atr14:              atr14[i],
+      ichimokuTenkan:     ichimokuData[i].tenkan,
+      ichimokuKijun:      ichimokuData[i].kijun,
+      ichimokuSenkouA:    ichimokuData[i].senkouA,
+      ichimokuSenkouB:    ichimokuData[i].senkouB,
+      ichimokuChikou:     ichimokuData[i].chikou,
+      superTrendValue:    superTrendData[i].value,
+      superTrendDir:      superTrendData[i].direction,
     }));
 
     res.json({
@@ -73,6 +104,9 @@ technicalRouter.get('/:symbol', technicalLimiter, async (req, res) => {
         timeframe,
         bars,
         indicators: indicatorSeries,
+        fibonacci: fibLevels,
+        volumeProfile: volProfile,
+        patterns: patternsWithTime,
       },
     });
   } catch (err) {

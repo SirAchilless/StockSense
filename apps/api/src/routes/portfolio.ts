@@ -1,12 +1,30 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
 import { prisma } from '../lib/prisma';
 import { authenticate } from '../middleware/authenticate';
 import { getMarketDataProvider } from '../services/market-data';
 import { calculateHoldingPnL, calculatePortfolioSummary } from '../lib/pnl';
+import { parseImportBuffer } from '../lib/import-parser';
 
 export const portfolioRouter = Router();
 portfolioRouter.use(authenticate); // all portfolio routes require auth
+
+// Multer config — memory storage, 5MB limit, CSV/XLSX only
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['text/csv', 'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/csv', 'text/plain'];
+    if (allowed.includes(file.mimetype) || file.originalname.match(/\.(csv|xlsx|xls)$/i)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV and Excel files are allowed'));
+    }
+  },
+});
 
 // GET /portfolio — full portfolio with live P&L
 portfolioRouter.get('/', async (req, res) => {
@@ -118,4 +136,47 @@ portfolioRouter.delete('/holdings/:id', async (req, res) => {
 
   await prisma.holding.delete({ where: { id: req.params.id } });
   res.json({ data: { message: 'Holding deleted' } });
+});
+
+// POST /portfolio/import
+portfolioRouter.post('/import', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: 'No file uploaded' });
+    return;
+  }
+
+  const { rows, errors } = parseImportBuffer(req.file.buffer, req.file.mimetype);
+
+  if (rows.length === 0) {
+    res.status(422).json({
+      error: 'No valid rows to import',
+      data: { imported: 0, skipped: 0, errors },
+    });
+    return;
+  }
+
+  const portfolio = await prisma.portfolio.upsert({
+    where: { userId: req.user!.id },
+    update: {},
+    create: { userId: req.user!.id },
+  });
+
+  await prisma.holding.createMany({
+    data: rows.map((r) => ({
+      portfolioId: portfolio.id,
+      symbol: r.symbol,
+      quantity: r.quantity,
+      buyPrice: r.buyPrice,
+      buyDate: new Date(r.buyDate),
+      notes: r.notes,
+    })),
+  });
+
+  res.status(201).json({
+    data: {
+      imported: rows.length,
+      skipped: errors.length,
+      errors,
+    },
+  });
 });

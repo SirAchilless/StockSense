@@ -3,10 +3,12 @@ import { usePortfolio } from '../hooks/usePortfolio';
 import { PortfolioSummary } from '../components/portfolio/PortfolioSummary';
 import { HoldingsTable } from '../components/portfolio/HoldingsTable';
 import { AddHoldingForm } from '../components/portfolio/AddHoldingForm';
+import { ImportHoldingsForm } from '../components/portfolio/ImportHoldingsForm';
 
 export default function PortfolioPage() {
   const { data, isLoading, isError, error } = usePortfolio();
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-6 py-8">
@@ -16,19 +18,34 @@ export default function PortfolioPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Portfolio</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">Track your holdings and P&amp;L in real time.</p>
         </div>
-        {!showForm && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            + Add Holding
-          </button>
+        {!showForm && !showImport && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowImport(true)}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
+            >
+              Import CSV
+            </button>
+            <button
+              onClick={() => setShowForm(true)}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              + Add Holding
+            </button>
+          </div>
         )}
       </div>
 
       {/* Add holding form */}
       {showForm && (
         <AddHoldingForm onClose={() => setShowForm(false)} />
+      )}
+
+      {/* Import CSV form */}
+      {showImport && (
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <ImportHoldingsForm onClose={() => setShowImport(false)} />
+        </div>
       )}
 
       {/* Loading state */}

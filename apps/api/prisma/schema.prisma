@@ -67,3 +67,28 @@ model ResearchSnapshot {
   @@index([symbol, userId])
   @@index([symbol, createdAt])
 }
+
+model ChatThread {
+  id        String        @id @default(cuid())
+  userId    String
+  symbol    String?       // optional — scoped to a stock if set
+  title     String?       // derived from first message for display
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([userId])
+}
+
+model ChatMessage {
+  id         String      @id @default(cuid())
+  threadId   String
+  thread     ChatThread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role       String      // "user" | "assistant"
+  content    String
+  disclaimer Boolean     @default(false)  // true when reply is recommendation-shaped
+  confidence Float?
+  createdAt  DateTime    @default(now())
+
+  @@index([threadId])
+}

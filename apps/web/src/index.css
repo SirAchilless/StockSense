@@ -65,6 +65,12 @@
   }
 }
 
+/* Chat typing indicator bounce */
+@keyframes bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30%            { transform: translateY(-4px); }
+}
+
 /* Scrollbar styling */
 @layer utilities {
   .scrollbar-thin {

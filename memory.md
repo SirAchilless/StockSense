@@ -3,7 +3,7 @@
 > Analytical snapshot of the whole repository: what the project is, how it is
 > structured, what is actually built (vs. documented), and the notable gaps
 > between the documentation set and the code.
-> First generated 2026-07-28; last updated 2026-07-28 after Phase 3.2 (F&O Intelligence).
+> First generated 2026-07-28; last updated 2026-07-28 after full Phase 3.2 audit + completion pass.
 
 ---
 
@@ -27,19 +27,19 @@ recommendation-shaped output ("not a SEBI-registered investment adviser").
 
 ## 2. Tech stack
 
-| Layer | Stack |
-|---|---|
-| Frontend | React 19, TypeScript, Vite 5, TailwindCSS 3, shadcn/ui (Radix), Framer Motion, TanStack Query 5, TanStack Table, Redux Toolkit, React Router 6, Recharts, lightweight-charts |
-| Backend | Node.js 20+, Express 4, TypeScript (strict) |
-| Database | PostgreSQL 16 + Prisma 5 |
-| Auth | JWT (access + rotating refresh), Google OAuth (passport-google-oauth20), bcryptjs |
-| AI | NVIDIA NIM (OpenAI-compatible), provider-agnostic `AIProvider` interface; Mock adapter default |
-| Market data | Pluggable `MarketDataProvider`; Alpha Vantage adapter + Mock default |
-| Options data | Pluggable `OptionChainProvider`; NSE adapter + Mock default (Phase 3.1) |
-| F&O data | Pluggable `FnoDataProvider`; NSE adapter + Mock default (Phase 3.2) |
-| News | Pluggable `NewsProvider`; RSS adapter + Mock default |
-| Tooling | pnpm 9 workspaces, ESLint, Prettier, Vitest |
-| Infra (documented) | Docker, NGINX, GitHub Actions, Vercel (web), AWS ECS/RDS (api) |
+| Layer              | Stack                                                                                                                                                                        |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend           | React 19, TypeScript, Vite 5, TailwindCSS 3, shadcn/ui (Radix), Framer Motion, TanStack Query 5, TanStack Table, Redux Toolkit, React Router 6, Recharts, lightweight-charts |
+| Backend            | Node.js 20+, Express 4, TypeScript (strict)                                                                                                                                  |
+| Database           | PostgreSQL 16 + Prisma 5                                                                                                                                                     |
+| Auth               | JWT (access + rotating refresh), Google OAuth (passport-google-oauth20), bcryptjs                                                                                            |
+| AI                 | NVIDIA NIM (OpenAI-compatible), provider-agnostic `AIProvider` interface; Mock adapter default                                                                               |
+| Market data        | Pluggable `MarketDataProvider`; Alpha Vantage adapter + Mock default                                                                                                         |
+| Options data       | Pluggable `OptionChainProvider`; NSE adapter + Mock default (Phase 3.1)                                                                                                      |
+| F&O data           | Pluggable `FnoDataProvider`; NSE adapter + Mock default (Phase 3.2)                                                                                                          |
+| News               | Pluggable `NewsProvider`; RSS adapter + Mock default                                                                                                                         |
+| Tooling            | pnpm 9 workspaces, ESLint, Prettier, Vitest                                                                                                                                  |
+| Infra (documented) | Docker, NGINX, GitHub Actions, Vercel (web), AWS ECS/RDS (api)                                                                                                               |
 
 ---
 
@@ -72,6 +72,7 @@ cookie-parser, passport.
 **Layered structure:** `routes → lib/services → prisma`.
 
 ### Services (the only layers allowed to touch external providers)
+
 - **`services/market-data/`** — `MarketDataProvider` with `MockMarketDataAdapter`
   (default) and `AlphaVantageAdapter`. Env: `MARKET_DATA_PROVIDER`.
 - **`services/ai/`** — `AIProvider` with `MockAIAdapter` (default) and
@@ -82,14 +83,15 @@ cookie-parser, passport.
   Plus shared `DISCLAIMER`.
 - **`services/news/`** — `NewsProvider` with `MockNewsAdapter` (default) and
   `RssNewsAdapter`. Env: `NEWS_PROVIDER`.
-- **`services/options/`** *(3.1)* — `OptionChainProvider` with
+- **`services/options/`** _(3.1)_ — `OptionChainProvider` with
   `MockOptionChainAdapter` (default) and `NseOptionsAdapter`. Env: `OPTIONS_PROVIDER`.
-- **`services/fno/`** *(3.2)* — `FnoDataProvider` with `MockFnoAdapter` (default)
+- **`services/fno/`** _(3.2)_ — `FnoDataProvider` with `MockFnoAdapter` (default)
   and `NseFnoAdapter`. Env: `FNO_PROVIDER`.
 
 All services use lazy singleton factory; all default to Mock → **zero API keys needed**.
 
 ### `lib/` utilities
+
 `jwt.ts`, `passport.ts`, `prisma.ts`, `import-parser.ts` (CSV/XLSX),
 `indicators.ts` (SMA/EMA/RSI/MACD), `pnl.ts` (realized/unrealized P&L),
 `portfolio-risk.ts` (2.5 — deterministic risk/diversification),
@@ -99,10 +101,12 @@ participant L/S ratio, contra signal).
 `middleware/authenticate.ts` guards protected routes.
 
 ### Persistence (Prisma)
+
 Models: `User`, `RefreshToken`, `Portfolio` (1:1 with user), `Holding`. Postgres
 16 via `DATABASE_URL`. `docker-compose.yml` provisions only local Postgres.
 
 ### Tests (Vitest — 176 tests across 11 files)
+
 Pre-existing: `import-parser` (dep missing in sandbox), `indicators`, `pnl`,
 `portfolio-risk`, `grounding-pipeline`, market-data / ai / news mock adapters.
 Phase 3.1: `options-greeks` (25), `mock-options-adapter` (18).
@@ -148,23 +152,29 @@ Public: `/login`, `/register`. Protected: `/dashboard`, `/portfolio`,
 
 ---
 
-## 8. Build status by phase (verified 2026-07-28)
+## 8. Build status by phase (verified 2026-07-28, full audit + fix pass)
 
-- **Phase 1 (1.1–1.11):** built — scaffolding, auth, market-data, dashboard,
-  portfolio (manual + CSV/Excel), grounding pipeline, AI research, technical analysis, chat.
+- **Phase 1 (1.1–1.11):** built and green — scaffolding (+ CI + Husky added 2026-07-28),
+  auth, market-data, dashboard, portfolio (manual + CSV/Excel), grounding pipeline,
+  AI research, technical analysis, chat.
 - **Phase 2.1–2.4:** built — Global Markets, Market Breadth, Technical components, News+sentiment.
 - **Phase 2.5 (Portfolio AI):** built — deterministic risk/diversification scoring,
   `GET /portfolio/analysis`, AI narrative, `PortfolioAIPanel`.
 - **Phase 3.1 (Option Chain Intelligence):** built — Black-Scholes Greeks library,
-  mock + NSE adapters, `GET /options/chain|analysis`, full frontend. 37 new tests.
-- **Phase 3.2 (F&O Intelligence):** built this session — rollover %, cost of carry,
-  FII/DII 10-day series with 5d rolling sums, participant-wise OI with contra signal,
-  `runFnoPipeline`, `GET /fno/rollover|fii-positions|participant-oi|analysis`,
-  full frontend (RolloverPanel, FiiDiiDerPanel, ParticipantOITable, FnoAIPanel).
-  **44 new tests; total 176 tests pass.**
+  mock + NSE adapters, `GET /options/chain|analysis`, full frontend.
+- **Phase 3.2 (F&O Intelligence):** COMPLETE (2026-07-28 final pass) —
+  - `classifyOITrend` pure function + 4 unit tests
+  - FnoDataProvider extended: PCRData, OITrend, CostOfCarryItem, +5 methods
+  - 11 new API routes (incl. PCR, OI trends, cost-of-carry, market-wide)
+  - `DataUnavailableError` typed error class + `packages/market-data/interfaces`
+  - Frontend: AIDisclaimer, PCRGauge (glassmorphism), PCRTrendChart, OITrendTable,
+    CostOfCarryChart, RolloverCard (glassmorphism), RolloverHeatmap (≥50 symbols),
+    FnOAICommentary, FnODashboard (8-tab page replacing FnoPage)
+  - **196 tests passing; tsc --noEmit clean on both api + web**
 - **Phase 3.3–3.5:** not started (compliance-gated).
 
 ### Phase 3.2 grounding design (important)
+
 Rollover %, cost of carry, FII/DII 5-day sums, and participant L/S ratios are
 computed **deterministically** in `lib/fno-analytics.ts` before any AI call.
 The AI receives only those pre-computed aggregates — no raw series — and narrates
@@ -181,15 +191,15 @@ See [FNO_INTELLIGENCE.md](./FNO_INTELLIGENCE.md).
 4. **Default runtime fully mocked** until env vars are set.
 5. **`API_DOCUMENTATION.md` and `FEATURES.md`** don't yet document `/options/*` or `/fno/*` — docs pass needed.
 
-## 10. Repo health — pre-existing issues (not from Phase 3.2) 🔧
+## 10. Repo health — current status 2026-07-28 ✅
 
-- `Express.User` has no `id` augmentation → `req.user!.id` errors under `tsc`.
-- `chat.ts` / `runChatPipeline` `disclaimer` type conflict.
-- Several `no-useless-escape` lint errors in route regexes.
-- Web app missing `vite/client` types → `import.meta.env` errors.
-- `import-parser.test.ts` requires `xlsx` not installed in dev sandbox.
+All pre-existing TypeScript errors resolved in 2026-07-28 pass:
 
-**176 tests pass** (Vitest uses esbuild, not `tsc`).
+- Express.User augmentation fixed (id/email now on User interface)
+- runChatPipeline disclaimer type conflict resolved
+- vite/client types added (vite-env.d.ts)
+- Prisma client regenerated; declaration emit disabled for app packages
+- **196 tests pass** (Vitest); **tsc --noEmit clean** on api + web
 
 ## 11. Quick-reference API surface
 
@@ -201,7 +211,9 @@ See [FNO_INTELLIGENCE.md](./FNO_INTELLIGENCE.md).
 `POST /chat/message` · `GET /news`, `/news/:symbol` · global-markets & breadth ·
 `GET /options/symbols`, `/options/expiries/:symbol`,
 `/options/chain/:symbol`, `/options/analysis/:symbol` ·
-**`GET /fno/symbols`, `/fno/rollover/:symbol`, `/fno/fii-positions`,
-`/fno/participant-oi`, `/fno/analysis/:symbol`** (Phase 3.2)
+**`GET /fno/symbols`, `/fno/rollover/market-wide`, `/fno/rollover/:symbol`,
+`/fno/fii-positions`, `/fno/participant-oi`, `/fno/cost-of-carry/:symbol`,
+`/fno/oi-trends/:symbol`, `/fno/pcr/market-wide`, `/fno/pcr/:symbol`,
+`/fno/analysis/:symbol`, `POST /fno/ai-commentary`** (Phase 3.2)
 
-Error shape: `{ error: { code, message, details } }`. Rate limits per group.
+Error shape: `{ error: { code, message, retryable } }`. Success shape: `{ data, meta: { source, asOf, cachedAt } }`. Rate limits per group.

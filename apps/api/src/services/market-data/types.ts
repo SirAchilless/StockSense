@@ -62,10 +62,45 @@ export interface OHLCBar {
 
 export type Timeframe = '1D' | '1W' | '1M' | '1Y';
 
+// ── Global market instruments ─────────────────────────────────────────────
+export type GlobalSymbol =
+  | 'DOW'      // Dow Jones Industrial Average
+  | 'NASDAQ'   // NASDAQ Composite
+  | 'SP500'    // S&P 500
+  | 'NIKKEI'   // Nikkei 225
+  | 'HANGSENG' // Hang Seng
+  | 'DAX'      // DAX 40
+  | 'CRUDE_OIL'
+  | 'GOLD'
+  | 'SILVER'
+  | 'USD_INR'
+  | 'DXY'      // US Dollar Index
+  | 'BTC_USD'
+  | 'ETH_USD';
+
+export const GLOBAL_SYMBOLS: GlobalSymbol[] = [
+  'DOW', 'NASDAQ', 'SP500', 'NIKKEI', 'HANGSENG', 'DAX',
+  'CRUDE_OIL', 'GOLD', 'SILVER', 'USD_INR', 'DXY', 'BTC_USD', 'ETH_USD',
+];
+
+export type GlobalCategory = 'equity' | 'commodity' | 'forex' | 'crypto';
+
+export interface GlobalQuote {
+  symbol: GlobalSymbol;
+  name: string;
+  category: GlobalCategory;
+  price: number;
+  change: number;
+  changePercent: number;
+  currency: string;    // 'USD', 'INR', etc.
+  lastUpdated: string; // ISO timestamp
+}
+
 export interface MarketDataProvider {
   getIndexQuotes(symbols: IndexSymbol[]): Promise<IndexQuote[]>;
   getMarketStatus(): Promise<MarketStatusInfo>;
   getStockQuote(symbol: string): Promise<StockQuote>;
   getStockFundamentals(symbol: string): Promise<StockFundamentals>;
   getOHLC(symbol: string, timeframe: Timeframe): Promise<OHLCBar[]>;
+  getGlobalQuotes(symbols: GlobalSymbol[]): Promise<GlobalQuote[]>;
 }

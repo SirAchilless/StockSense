@@ -50,6 +50,11 @@ describe('runResearchPipeline', () => {
         dayHigh: 0, dayLow: 0, volume: 0, previousClose: 0,
         lastUpdated: new Date().toISOString(),
       }),
+      // not under test — delegate to real mock
+      getIndexQuotes: marketDataProvider.getIndexQuotes.bind(marketDataProvider),
+      getMarketStatus: marketDataProvider.getMarketStatus.bind(marketDataProvider),
+      getOHLC: marketDataProvider.getOHLC.bind(marketDataProvider),
+      getGlobalQuotes: marketDataProvider.getGlobalQuotes.bind(marketDataProvider),
     };
 
     const result = await runResearchPipeline({ symbol: 'UNKNOWN', marketDataProvider: emptyProvider, aiProvider });

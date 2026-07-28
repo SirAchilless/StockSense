@@ -1,6 +1,6 @@
 import axios from 'axios';
-import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse } from './types';
-import { ResearchResponseSchema, ChatResponseSchema } from './types';
+import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse } from './types';
+import { ResearchResponseSchema, ChatResponseSchema, GlobalNoteResponseSchema } from './types';
 
 const SYSTEM_PROMPT_RESEARCH = `You are a financial research assistant for Indian equity markets.
 
@@ -127,6 +127,38 @@ ${CHAT_SCHEMA_DESCRIPTION}
       const parsed = ChatResponseSchema.safeParse(JSON.parse(raw));
       if (parsed.success) return parsed.data;
       if (attempt === 1) throw new Error(`Chat response failed schema validation after 2 attempts`);
+    }
+    throw new Error('unreachable');
+  }
+
+  async generateGlobalNote(req: GroundedPromptRequest): Promise<GlobalNoteResponse> {
+    const SYSTEM_PROMPT_GLOBAL = `You are a financial analyst explaining global market moves to Indian retail investors.
+
+CRITICAL RULES:
+1. Only reference data present in the <global_markets> block. Never invent figures.
+2. Write a concise 2-3 sentence note explaining what the global moves mean for Indian markets today (FII flows, commodity impact, risk-on/risk-off sentiment).
+3. Return ONLY valid JSON. No preamble, no markdown.
+4. If data is insufficient, set dataAvailable to false and explain briefly.`;
+
+    const GLOBAL_NOTE_SCHEMA = `{
+  "note": "string — 2-3 sentences explaining global moves and their relevance to Indian markets",
+  "confidence": "number 0.0–1.0 based on data completeness",
+  "dataAvailable": "boolean"
+}`;
+
+    const userMessage = `
+<global_markets>
+${JSON.stringify(req.marketData ?? {}, null, 2)}
+</global_markets>
+
+Write the India-relevance note. Return JSON matching exactly:
+${GLOBAL_NOTE_SCHEMA}
+`;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const raw = await this.callChatCompletion(this.chatModel, SYSTEM_PROMPT_GLOBAL, userMessage);
+      const parsed = GlobalNoteResponseSchema.safeParse(JSON.parse(raw));
+      if (parsed.success) return parsed.data;
+      if (attempt === 1) throw new Error(`Global note failed schema validation after 2 attempts`);
     }
     throw new Error('unreachable');
   }

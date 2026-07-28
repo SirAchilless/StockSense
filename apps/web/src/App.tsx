@@ -9,6 +9,7 @@ const PortfolioPage = lazy(() => import('./pages/PortfolioPage'));
 const ResearchPage = lazy(() => import('./pages/ResearchPage'));
 const TechnicalPage = lazy(() => import('./pages/TechnicalPage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
+const GlobalMarketsPage = lazy(() => import('./pages/GlobalMarketsPage'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 
@@ -45,6 +46,7 @@ function App() {
             <Route path="/research" element={<ResearchPage />} />
             <Route path="/technical" element={<TechnicalPage />} />
             <Route path="/chat" element={<ChatPage />} />
+            <Route path="/global" element={<GlobalMarketsPage />} />
           </Route>
 
           {/* Redirect root to dashboard */}

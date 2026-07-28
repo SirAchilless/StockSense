@@ -83,6 +83,36 @@ export async function runResearchPipeline(input: ResearchPipelineInput): Promise
   };
 }
 
+// ── Global Markets Note Pipeline ─────────────────────────────────────────
+import type { GlobalQuote } from '../market-data/types';
+import type { GlobalNoteResponse } from './types';
+
+export interface GlobalNotePipelineInput {
+  quotes: GlobalQuote[];
+  aiProvider: AIProvider;
+}
+
+export async function runGlobalNotePipeline(
+  input: GlobalNotePipelineInput
+): Promise<GlobalNoteResponse & { disclaimer: string }> {
+  const { quotes, aiProvider } = input;
+  const marketData = {
+    quotes: quotes.map((q) => ({
+      symbol: q.symbol,
+      name: q.name,
+      category: q.category,
+      price: q.price,
+      change: q.change,
+      changePercent: q.changePercent,
+      currency: q.currency,
+      lastUpdated: q.lastUpdated,
+    })),
+    fetchedAt: new Date().toISOString(),
+  };
+  const result = await aiProvider.generateGlobalNote({ useCase: 'global_note', marketData });
+  return { ...result, disclaimer: DISCLAIMER };
+}
+
 export interface ChatPipelineInput {
   userMessage: string;
   context: Record<string, unknown>;

@@ -4,9 +4,9 @@ import { MockAIAdapter } from './mock-ai-adapter';
 
 export { MockAIAdapter } from './mock-ai-adapter';
 export { NvidiaNimAdapter } from './nvidia-nim-adapter';
-export { runResearchPipeline, runChatPipeline, DISCLAIMER } from './grounding-pipeline';
-export type { ResearchPipelineResult } from './grounding-pipeline';
-export type { ResearchResponse, ChatResponse, AIProvider } from './types';
+export { runResearchPipeline, runChatPipeline, runGlobalNotePipeline, DISCLAIMER } from './grounding-pipeline';
+export type { ResearchPipelineResult, GlobalNotePipelineInput } from './grounding-pipeline';
+export type { ResearchResponse, ChatResponse, GlobalNoteResponse, AIProvider } from './types';
 
 let _instance: AIProvider | null = null;
 

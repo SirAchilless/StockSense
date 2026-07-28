@@ -1,4 +1,4 @@
-import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse } from './types';
+import type { AIProvider, GroundedPromptRequest, ResearchResponse, ChatResponse, GlobalNoteResponse } from './types';
 
 export class MockAIAdapter implements AIProvider {
   async generateResearch(req: GroundedPromptRequest): Promise<ResearchResponse> {
@@ -52,6 +52,26 @@ export class MockAIAdapter implements AIProvider {
       confidence: hasData ? 0.7 : 0.1,
       dataAvailable: hasData,
       disclaimer: false,
+    };
+  }
+
+  async generateGlobalNote(req: GroundedPromptRequest): Promise<GlobalNoteResponse> {
+    const quotes = (req.marketData?.quotes ?? []) as Array<{ name: string; changePercent: number }>;
+    const hasData = quotes.length > 0;
+    if (!hasData) {
+      return { note: 'Insufficient global market data to generate a note.', confidence: 0.1, dataAvailable: false };
+    }
+    const movers = quotes
+      .filter((q) => Math.abs(q.changePercent) > 0.5)
+      .slice(0, 3)
+      .map((q) => `${q.name} (${q.changePercent > 0 ? '+' : ''}${q.changePercent.toFixed(2)}%)`)
+      .join(', ');
+    return {
+      note: movers
+        ? `Key global moves today: ${movers}. These may influence Indian market sentiment at open through FII flows, commodity pricing, and risk appetite.`
+        : 'Global markets are relatively flat today; limited directional impact on Indian equities is expected.',
+      confidence: 0.8,
+      dataAvailable: true,
     };
   }
 }

@@ -36,6 +36,7 @@ export function AppLayout() {
               { to: '/portfolio', label: 'Portfolio' },
               { to: '/research', label: 'Research' },
               { to: '/technical', label: 'Technical' },
+              { to: '/global', label: 'Global' },
               { to: '/chat', label: 'AI Chat' },
             ].map(({ to, label }) => (
               <NavLink

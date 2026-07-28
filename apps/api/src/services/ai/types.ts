@@ -31,11 +31,19 @@ export const ChatResponseSchema = z.object({
 
 export type ChatResponse = z.infer<typeof ChatResponseSchema>;
 
+export const GlobalNoteResponseSchema = z.object({
+  note: z.string().min(1),
+  confidence: z.number().min(0).max(1),
+  dataAvailable: z.boolean(),
+});
+
+export type GlobalNoteResponse = z.infer<typeof GlobalNoteResponseSchema>;
+
 // ──────────────────────────────
 // Grounded prompt request
 // ──────────────────────────────
 export interface GroundedPromptRequest {
-  useCase: 'research' | 'chat';
+  useCase: 'research' | 'chat' | 'global_note';
   symbol?: string;
   marketData?: Record<string, unknown>;  // pre-fetched, injected verbatim
   userMessage?: string;                  // for chat use case
@@ -47,4 +55,5 @@ export interface GroundedPromptRequest {
 export interface AIProvider {
   generateResearch(req: GroundedPromptRequest): Promise<ResearchResponse>;
   generateChatReply(req: GroundedPromptRequest): Promise<ChatResponse>;
+  generateGlobalNote(req: GroundedPromptRequest): Promise<GlobalNoteResponse>;
 }

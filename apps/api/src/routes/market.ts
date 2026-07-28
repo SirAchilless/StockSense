@@ -1,6 +1,8 @@
 import { Router } from 'express';
-import { getMarketDataProvider } from '../services/market-data';
 import rateLimit from 'express-rate-limit';
+import { authenticate } from '../middleware/authenticate';
+import { getMarketDataProvider, GLOBAL_SYMBOLS } from '../services/market-data';
+import { getAIProvider, runGlobalNotePipeline } from '../services/ai';
 
 export const marketRouter = Router();
 
@@ -19,5 +21,28 @@ marketRouter.get('/indices', async (_req, res) => {
   } catch (err) {
     console.error('[market/indices]', err);
     res.status(502).json({ error: 'Market data unavailable' });
+  }
+});
+
+const globalLimiter = rateLimit({ windowMs: 60_000, max: 15 });
+
+// GET /market/global — auth-gated; fetches all global instruments + AI note
+marketRouter.get('/global', authenticate, globalLimiter, async (_req, res) => {
+  try {
+    const provider = getMarketDataProvider();
+    const quotes = await provider.getGlobalQuotes(GLOBAL_SYMBOLS);
+
+    // AI note is best-effort — don't fail the whole response if it errors
+    let aiNote: { note: string; confidence: number; dataAvailable: boolean; disclaimer: string } | null = null;
+    try {
+      aiNote = await runGlobalNotePipeline({ quotes, aiProvider: getAIProvider() });
+    } catch (aiErr) {
+      console.warn('[market/global] AI note generation failed:', aiErr);
+    }
+
+    res.json({ data: { quotes, aiNote } });
+  } catch (err) {
+    console.error('[market/global]', err);
+    res.status(502).json({ error: 'Global market data unavailable' });
   }
 });

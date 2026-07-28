@@ -1,9 +1,10 @@
-import { Routes, Route } from 'react-router-dom';
+import { Navigate, Routes, Route } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import ProtectedRoute from './components/ProtectedRoute';
+import { AppLayout } from './components/layout/AppLayout';
 import { useOAuthCallback } from './hooks/useOAuthCallback';
 
-const HomePage = lazy(() => import('./pages/HomePage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 
@@ -12,6 +13,15 @@ const Spinner = () => (
     <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
   </div>
 );
+
+// Layout route that gates on auth before rendering AppLayout's Outlet
+function ProtectedLayout() {
+  return (
+    <ProtectedRoute>
+      <AppLayout />
+    </ProtectedRoute>
+  );
+}
 
 function App() {
   // Handle ?token= injected by Google OAuth callback redirect
@@ -23,14 +33,14 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <HomePage />
-              </ProtectedRoute>
-            }
-          />
+
+          {/* Protected routes wrapped in AppLayout */}
+          <Route element={<ProtectedLayout />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+          </Route>
+
+          {/* Redirect root to dashboard */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Suspense>
     </div>

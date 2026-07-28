@@ -7,6 +7,7 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { healthRouter } from './routes/health';
 import { authRouter } from './routes/auth';
+import { marketRouter } from './routes/market';
 import passport from './lib/passport';
 
 const app = express();
@@ -25,6 +26,7 @@ app.use(passport.initialize());
 // Routes
 app.use('/health', healthRouter);
 app.use('/auth', authRouter);
+app.use('/market', marketRouter);
 
 // 404 handler
 app.use((_req, res) => {

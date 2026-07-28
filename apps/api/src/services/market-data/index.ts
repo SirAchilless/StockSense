@@ -4,7 +4,7 @@ import { AlphaVantageAdapter } from './alpha-vantage-adapter';
 
 export { MockMarketDataAdapter } from './mock-adapter';
 export { AlphaVantageAdapter } from './alpha-vantage-adapter';
-export type { MarketDataProvider, IndexSymbol, IndexQuote, MarketStatusInfo, StockQuote, StockFundamentals, OHLCBar, Timeframe, GlobalSymbol, GlobalQuote, GlobalCategory } from './types';
+export type { MarketDataProvider, IndexSymbol, IndexQuote, MarketStatusInfo, StockQuote, StockFundamentals, OHLCBar, Timeframe, GlobalSymbol, GlobalQuote, GlobalCategory, MarketBreadthData, BreadthStock, SectorPerformance, FiiDiiActivity, AdvanceDecline } from './types';
 export { GLOBAL_SYMBOLS } from './types';
 
 let _instance: MarketDataProvider | null = null;

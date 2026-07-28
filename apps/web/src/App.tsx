@@ -10,6 +10,7 @@ const ResearchPage = lazy(() => import('./pages/ResearchPage'));
 const TechnicalPage = lazy(() => import('./pages/TechnicalPage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 const GlobalMarketsPage = lazy(() => import('./pages/GlobalMarketsPage'));
+const BreadthPage = lazy(() => import('./pages/BreadthPage'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 
@@ -47,6 +48,7 @@ function App() {
             <Route path="/technical" element={<TechnicalPage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/global" element={<GlobalMarketsPage />} />
+            <Route path="/breadth" element={<BreadthPage />} />
           </Route>
 
           {/* Redirect root to dashboard */}

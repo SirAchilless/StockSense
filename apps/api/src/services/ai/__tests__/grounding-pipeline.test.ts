@@ -55,6 +55,7 @@ describe('runResearchPipeline', () => {
       getMarketStatus: marketDataProvider.getMarketStatus.bind(marketDataProvider),
       getOHLC: marketDataProvider.getOHLC.bind(marketDataProvider),
       getGlobalQuotes: marketDataProvider.getGlobalQuotes.bind(marketDataProvider),
+      getMarketBreadth: marketDataProvider.getMarketBreadth.bind(marketDataProvider),
     };
 
     const result = await runResearchPipeline({ symbol: 'UNKNOWN', marketDataProvider: emptyProvider, aiProvider });

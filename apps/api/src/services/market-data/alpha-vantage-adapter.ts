@@ -2,7 +2,7 @@ import axios from 'axios';
 import type {
   MarketDataProvider, IndexSymbol, IndexQuote, MarketStatusInfo,
   StockQuote, StockFundamentals, OHLCBar, Timeframe,
-  GlobalSymbol, GlobalQuote,
+  GlobalSymbol, GlobalQuote, MarketBreadthData, BreadthStock,
 } from './types';
 import { MockMarketDataAdapter } from './mock-adapter';
 
@@ -224,5 +224,39 @@ export class AlphaVantageAdapter implements MarketDataProvider {
       console.warn(`[AlphaVantage] getGlobalQuotes fallback for ${symbols[i]}: ${(r.reason as Error).message}`);
       return mockFallbacks[i];
     });
+  }
+
+  async getMarketBreadth(): Promise<MarketBreadthData> {
+    // Alpha Vantage does not have a dedicated NSE breadth endpoint.
+    // Use TOP_GAINERS_LOSERS (US markets) as a structural placeholder and fall
+    // back to the mock for the Indian-specific data (advance/decline, FII/DII,
+    // sector performance) which requires NSE/BSE data feeds.
+    try {
+      const data = await this.fetch<Record<string, unknown>>({
+        function: 'TOP_GAINERS_LOSERS',
+      });
+
+      const parseStock = (raw: Record<string, string>): BreadthStock => ({
+        symbol: raw['ticker'] ?? '',
+        name: raw['ticker'] ?? '',
+        price: parseFloat(raw['price'] ?? '0'),
+        change: parseFloat(raw['change_amount'] ?? '0'),
+        changePercent: parseFloat((raw['change_percentage'] ?? '0').replace('%', '')),
+        volume: parseInt(raw['volume'] ?? '0', 10),
+      });
+
+      const gainers = ((data['top_gainers'] ?? []) as Record<string, string>[]).slice(0, 10).map(parseStock);
+      const losers  = ((data['top_losers']  ?? []) as Record<string, string>[]).slice(0, 10).map(parseStock);
+
+      if (!gainers.length && !losers.length) throw new Error('Empty TOP_GAINERS_LOSERS response');
+
+      // Merge live gainers/losers into the mock breadth structure
+      const mock = new MockMarketDataAdapter();
+      const base = await mock.getMarketBreadth();
+      return { ...base, topGainers: gainers, topLosers: losers };
+    } catch (err) {
+      console.warn('[AlphaVantage] getMarketBreadth falling back to mock:', (err as Error).message);
+      return new MockMarketDataAdapter().getMarketBreadth();
+    }
   }
 }

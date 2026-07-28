@@ -96,6 +96,51 @@ export interface GlobalQuote {
   lastUpdated: string; // ISO timestamp
 }
 
+// ── Market Breadth ────────────────────────────────────────────────────────
+
+export interface AdvanceDecline {
+  advances: number;
+  declines: number;
+  unchanged: number;
+  total: number;
+  advanceDeclineRatio: number; // advances / declines, null when declines = 0
+}
+
+export interface BreadthStock {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  volume: number;
+}
+
+export interface SectorPerformance {
+  sector: string;
+  changePercent: number;
+  advances: number;
+  declines: number;
+}
+
+export interface FiiDiiActivity {
+  date: string;           // YYYY-MM-DD
+  fiiNetBuy: number;      // crores INR; negative = net sell
+  diiNetBuy: number;
+  fiiGrossBuy: number;
+  fiiGrossSell: number;
+  diiGrossBuy: number;
+  diiGrossSell: number;
+}
+
+export interface MarketBreadthData {
+  advanceDecline: AdvanceDecline;
+  topGainers: BreadthStock[];   // top 10 by changePercent ascending (best first)
+  topLosers: BreadthStock[];    // top 10 by changePercent descending (worst first)
+  sectorPerformance: SectorPerformance[];
+  fiiDii: FiiDiiActivity[];     // last 5 trading days
+  dataAsOf: string;
+}
+
 export interface MarketDataProvider {
   getIndexQuotes(symbols: IndexSymbol[]): Promise<IndexQuote[]>;
   getMarketStatus(): Promise<MarketStatusInfo>;
@@ -103,4 +148,5 @@ export interface MarketDataProvider {
   getStockFundamentals(symbol: string): Promise<StockFundamentals>;
   getOHLC(symbol: string, timeframe: Timeframe): Promise<OHLCBar[]>;
   getGlobalQuotes(symbols: GlobalSymbol[]): Promise<GlobalQuote[]>;
+  getMarketBreadth(): Promise<MarketBreadthData>;
 }

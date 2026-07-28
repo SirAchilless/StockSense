@@ -2,6 +2,7 @@ import type {
   MarketDataProvider, IndexSymbol, IndexQuote, MarketStatusInfo,
   StockQuote, StockFundamentals, OHLCBar, Timeframe,
   GlobalSymbol, GlobalQuote, GlobalCategory,
+  MarketBreadthData, BreadthStock, FiiDiiActivity,
 } from './types';
 
 // Determine if Indian market is currently open
@@ -154,5 +155,84 @@ export class MockMarketDataAdapter implements MarketDataProvider {
       });
     }
     return bars;
+  }
+
+  async getMarketBreadth(): Promise<MarketBreadthData> {
+    const now = new Date();
+
+    const gainers: BreadthStock[] = [
+      { symbol: 'TATAMOTORS',  name: 'Tata Motors Ltd',          price: 948.30,  change:  47.20,  changePercent:  5.24, volume: 18432100 },
+      { symbol: 'ADANIENT',    name: 'Adani Enterprises Ltd',     price: 2876.50, change: 121.40,  changePercent:  4.41, volume:  4213800 },
+      { symbol: 'BAJFINANCE',  name: 'Bajaj Finance Ltd',         price: 7124.00, change: 284.50,  changePercent:  4.16, volume:  3184200 },
+      { symbol: 'HDFCBANK',    name: 'HDFC Bank Ltd',             price: 1624.80, change:  52.30,  changePercent:  3.32, volume: 12847300 },
+      { symbol: 'WIPRO',       name: 'Wipro Ltd',                 price:  524.15, change:  16.45,  changePercent:  3.24, volume:  9234100 },
+      { symbol: 'INFY',        name: 'Infosys Ltd',               price: 1763.90, change:  52.10,  changePercent:  3.04, volume:  7843200 },
+      { symbol: 'MARUTI',      name: 'Maruti Suzuki India Ltd',   price: 12840.00,change: 356.00,  changePercent:  2.85, volume:   892400 },
+      { symbol: 'LT',          name: 'Larsen & Toubro Ltd',       price: 3634.70, change:  89.50,  changePercent:  2.52, volume:  2341500 },
+      { symbol: 'SBIN',        name: 'State Bank of India',       price:  821.45, change:  18.95,  changePercent:  2.36, volume: 21847300 },
+      { symbol: 'ICICIBANK',   name: 'ICICI Bank Ltd',            price: 1247.60, change:  26.40,  changePercent:  2.16, volume: 10234800 },
+    ];
+
+    const losers: BreadthStock[] = [
+      { symbol: 'ONGC',        name: 'Oil & Natural Gas Corp',    price:  271.30, change: -16.80,  changePercent: -5.83, volume: 24312700 },
+      { symbol: 'POWERGRID',   name: 'Power Grid Corp of India',  price:  321.40, change: -16.90,  changePercent: -5.00, volume:  8234600 },
+      { symbol: 'COALINDIA',   name: 'Coal India Ltd',            price:  453.20, change: -21.30,  changePercent: -4.49, volume: 11234500 },
+      { symbol: 'NTPC',        name: 'NTPC Ltd',                  price:  378.90, change: -15.60,  changePercent: -3.96, volume:  9876500 },
+      { symbol: 'SUNPHARMA',   name: 'Sun Pharmaceutical Ind',    price: 1634.80, change: -57.20,  changePercent: -3.38, volume:  4213800 },
+      { symbol: 'DRREDDY',     name: "Dr. Reddy's Laboratories",  price: 5847.30, change:-178.40,  changePercent: -2.96, volume:  1234700 },
+      { symbol: 'HINDUNILVR',  name: 'Hindustan Unilever Ltd',    price: 2534.60, change: -68.90,  changePercent: -2.65, volume:  2341800 },
+      { symbol: 'ITC',         name: 'ITC Ltd',                   price:  487.35, change: -11.85,  changePercent: -2.37, volume: 18234700 },
+      { symbol: 'BRITANNIA',   name: 'Britannia Industries Ltd',  price: 5213.40, change:-109.60,  changePercent: -2.06, volume:   783400 },
+      { symbol: 'NESTLEIND',   name: 'Nestlé India Ltd',          price: 2387.50, change: -43.20,  changePercent: -1.78, volume:   432100 },
+    ];
+
+    // Generate 5 days of FII/DII data ending today
+    const fiiDii: FiiDiiActivity[] = Array.from({ length: 5 }, (_, i) => {
+      const date = new Date(now);
+      date.setDate(date.getDate() - (4 - i));
+      // Skip weekends — shift to Friday
+      const day = date.getDay();
+      if (day === 0) date.setDate(date.getDate() - 2);
+      if (day === 6) date.setDate(date.getDate() - 1);
+      const fiiBuy  = 8000 + (i * 300);
+      const fiiSell = 9200 + (i * 150);
+      const diiBuy  = 7500 + (i * 200);
+      const diiSell = 5800 + (i * 100);
+      return {
+        date: date.toISOString().split('T')[0],
+        fiiNetBuy: +(fiiBuy - fiiSell).toFixed(2),
+        diiNetBuy: +(diiBuy - diiSell).toFixed(2),
+        fiiGrossBuy:  +fiiBuy.toFixed(2),
+        fiiGrossSell: +fiiSell.toFixed(2),
+        diiGrossBuy:  +diiBuy.toFixed(2),
+        diiGrossSell: +diiSell.toFixed(2),
+      };
+    });
+
+    return {
+      advanceDecline: {
+        advances: 1134,
+        declines:  892,
+        unchanged:  74,
+        total:    2100,
+        advanceDeclineRatio: +(1134 / 892).toFixed(2),
+      },
+      topGainers: gainers,
+      topLosers: losers,
+      sectorPerformance: [
+        { sector: 'Information Technology', changePercent:  2.84, advances: 18, declines:  4 },
+        { sector: 'Financials',             changePercent:  1.92, advances: 24, declines:  8 },
+        { sector: 'Auto',                   changePercent:  2.31, advances: 12, declines:  3 },
+        { sector: 'Consumer Discretionary', changePercent:  0.74, advances: 14, declines:  9 },
+        { sector: 'Metals & Mining',        changePercent: -0.43, advances:  9, declines: 13 },
+        { sector: 'Pharma',                 changePercent: -1.87, advances:  7, declines: 16 },
+        { sector: 'Energy',                 changePercent: -2.64, advances:  5, declines: 18 },
+        { sector: 'FMCG',                   changePercent: -1.12, advances:  8, declines: 14 },
+        { sector: 'Realty',                 changePercent:  1.03, advances: 10, declines:  6 },
+        { sector: 'Telecom',                changePercent:  0.38, advances:  6, declines:  5 },
+      ],
+      fiiDii,
+      dataAsOf: now.toISOString(),
+    };
   }
 }

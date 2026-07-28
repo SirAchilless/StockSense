@@ -24,6 +24,20 @@ marketRouter.get('/indices', async (_req, res) => {
   }
 });
 
+const breadthLimiter = rateLimit({ windowMs: 60_000, max: 20 });
+
+// GET /market/breadth — advance/decline, gainers/losers, sectors, FII/DII
+marketRouter.get('/breadth', authenticate, breadthLimiter, async (_req, res) => {
+  try {
+    const provider = getMarketDataProvider();
+    const breadth = await provider.getMarketBreadth();
+    res.json({ data: breadth });
+  } catch (err) {
+    console.error('[market/breadth]', err);
+    res.status(502).json({ error: 'Market breadth data unavailable' });
+  }
+});
+
 const globalLimiter = rateLimit({ windowMs: 60_000, max: 15 });
 
 // GET /market/global — auth-gated; fetches all global instruments + AI note
